@@ -6,8 +6,12 @@ from src.utils import save_checkpoints
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+
+import os
 import torch
 import time
+import random
+import numpy as np
 
 class BasicNeRF(BaseEngine):
     def __init__(self, cfg, writer=None):
@@ -35,15 +39,17 @@ class BasicNeRF(BaseEngine):
         
     def render(self, rays_origin, rays_direction, near, far):
         # TODO validate ray and camera parameters
-        rays_origin = rays_origin.view(-1, 3)  # B*n_rays x 3
-        rays_direction = rays_direction.view(-1, 3)  # B*n_rays x 3
+
+        # rays_origin = rays_origin.view(-1, 3)  # B*n_rays x 3
+        # rays_direction = rays_direction.view(-1, 3)  # B*n_rays x 3
         
-        near = near * torch.ones_like(rays_direction[...,:1])
-        far = far * torch.ones_like(rays_direction[...,:1])
+        near = near.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
+        far = far.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
         
         viewdirs = rays_direction
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
-        viewdirs = torch.reshape(viewdirs, [-1,3]).float()
+        # viewdirs = torch.reshape(viewdirs, [-1,3]).float()
+        viewdirs = viewdirs.float() # B x n_rays x 1
         
         out = self.render_rays(rays_origin, rays_direction, viewdirs, near, far,
                                n_samples=self.n_coarse_samples, n_samples_importance=self.n_fine_samples,
@@ -65,7 +71,7 @@ class BasicNeRF(BaseEngine):
         ret = {}
         # check flat
         # 1. check number of rays
-        n_rays = rays_origin.shape[0] # B*n_rays(sample ray per image) x 3
+        B, n_rays, _ = rays_origin.shape # B x n_rays(sample ray per image) x 3
         # 2. get rays origin and direction
         # 3. get near far
         
@@ -74,9 +80,9 @@ class BasicNeRF(BaseEngine):
 
         # 5. sample points (coarse)
         z_vals = near * (1.-t_vals) + far * (t_vals)
-        z_vals = z_vals.expand([n_rays, n_samples])
+        z_vals = z_vals.expand([B, n_rays, n_samples])
         # z_vals = torch.stack([z_vals for _ in range(n_rays)], dim=0) # [n_rays, n_samples]
-        
+
         # add perturbation
         mids = (z_vals[...,1:] + z_vals[...,:-1]) / 2
         uppers = torch.concat([mids, z_vals[...,-1:]], -1)
@@ -90,6 +96,8 @@ class BasicNeRF(BaseEngine):
         raw_rgb, raw_sigma = self.run_network(self.nerf_coarse, 
                                               sampled_points, 
                                               viewdirs)
+        raw_rgb = raw_rgb.cpu()
+        raw_sigma = raw_sigma.cpu()
         rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw_rgb, raw_sigma, 
                                                                      z_vals, rays_direction, 
                                                                      raw_noise_std, white_bkgd)
@@ -102,15 +110,17 @@ class BasicNeRF(BaseEngine):
         # 7. sample from pdf (importance sampling)
         z_vals_mid = .5 * (z_vals[...,1:] + z_vals[...,:-1])
         z_samples = sample_pdf(z_vals_mid, weights[...,1:-1], n_samples_importance, det=(perturb==0.))
-        z_samples = z_samples.detach()
+        z_samples = z_samples.detach() # [batch_size, n_rays, n_samples_importance]
 
         z_vals, _ = torch.sort(torch.cat([z_vals, z_samples], -1), -1)
-        sampled_points = rays_origin[...,None,:] + rays_direction[...,None,:] * z_vals[...,:,None] # [n_rays, n_samples + n_importance, 3]
+        sampled_points = rays_origin[...,None,:] + rays_direction[...,None,:] * z_vals[...,:,None] # [batch_size, n_rays, n_samples + n_importance, 3]
         
         # 8. compute fine output        
         raw_rgb, raw_sigma = self.run_network(self.nerf_fine,
                                               sampled_points, 
                                               viewdirs)
+        raw_rgb = raw_rgb.cpu()
+        raw_sigma = raw_sigma.cpu()
         rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw_rgb, raw_sigma, z_vals, rays_direction, raw_noise_std, white_bkgd)
         ret['fine_rgb_map'] = rgb_map
         ret['fine_disp_map'] = disp_map
@@ -121,19 +131,20 @@ class BasicNeRF(BaseEngine):
         return ret
 
     def run_network(self, model, pts, viewdirs):
-        B = pts.shape[0]
-        viewdirs = torch.stack([viewdirs for _ in range(B)], dim=0)
+        # pts -> n_rays x n_samples x 3, viewdirs -> B*n_samples x 3
+        B, n_rays, n_samples, _ = pts.shape
+        viewdirs = torch.concat([viewdirs.unsqueeze(2) for _ in range(n_samples)], dim=2)
         
-        # pts -> [B, N, 3], viewdirs -> [B, N, 3]
-        pts = torch.reshape(pts, [-1, 3]) # [B*N, 3]
-        viewdirs = torch.reshape(viewdirs, [-1, 3]) # [B*N, 3]
-        
+        # pts -> # [B x n_rays x n_samples x 3], viewdirs -> [B x n_rays x n_samples x 3]
+        pts = torch.reshape(pts, [-1, 3]) # [B*n_rays*n_samples x 3]
+        viewdirs = torch.reshape(viewdirs, [-1, 3]) # [B*n_rays*n_samples x 3]
+
         pts = pts.to(self.device)
         viewdirs = viewdirs.to(self.device)
         out_rgb, out_sigma = model(pts, viewdirs)
         
-        out_rgb = torch.reshape(out_rgb, [B, N, 3])
-        out_sigma = torch.reshape(out_sigma, [B, N, 1])
+        out_rgb = torch.reshape(out_rgb, [B, n_rays, n_samples, 3])
+        out_sigma = torch.reshape(out_sigma, [B, n_rays, n_samples, 1])
         
         return out_rgb, out_sigma
 
@@ -146,10 +157,14 @@ class BasicNeRF(BaseEngine):
             
         s = time.time()
         si = time.time()
+        train_loss_coarse = 0
+        train_loss_fine = 0
+        n_iters = 0
+        
         for iter, (targets, pose, ray_origins, ray_directions, near, far) in enumerate(dataloader):
-            # B, H, W, _ = image.shape
-            # print(targets.shape, pose.shape, ray_origins.shape, ray_directions.shape, near.shape, far.shape)
-            targets = targets.to(self.device)
+            targets = targets.to(self.device) # B x 3 x n_rays 
+            targets = targets.permute(0, 2, 1) # B x n_rays x 3
+            
             # pose = pose.to(self.device)
             # near = near.to(self.device)
             # far = far.to(self.device)
@@ -157,12 +172,19 @@ class BasicNeRF(BaseEngine):
             # ray_directions = ray_directions.to(self.device) # B x n_rays x 3
             
             out = self.render(ray_origins, ray_directions, near, far)
-            coarse = out['coarse_rgb_map'] # B * n_rays x 3
-            fine = out['fine_rgb_map'] # B * n_rays x 3
-            targets = targets.view(-1, 3) # B * n_rays x 3
+            coarse = out['coarse_rgb_map'] # B x n_rays x 3
+            fine = out['fine_rgb_map'] # B x n_rays x 3
             
-            new_view = (coarse + fine) / 2
-            loss = self.loss_fn(new_view, targets)
+            coarse = coarse.to(self.device)
+            fine = fine.to(self.device)
+
+            coarse_loss = self.loss_fn(coarse, targets)
+            fine_loss = self.loss_fn(fine, targets)
+            loss = coarse_loss + fine_loss
+            
+            train_loss_coarse += coarse_loss.item()
+            train_loss_fine += fine_loss.item()
+            n_iters += 1
             
             self.optimizer.zero_grad()
             loss.backward()
@@ -172,7 +194,8 @@ class BasicNeRF(BaseEngine):
                 print(f"{iter+1} / {len(dataloader)} Loss: ", loss.item(), "Time Elapsed: ", time.time() - si)
                 si = time.time()
                 
-        print("Time: ", time.time() - s)
+        return {'coarse train loss': train_loss_coarse / n_iters,
+                'fine train loss': train_loss_fine / n_iters}, time.time() - s
             
         
     def train(self, cfg, train_dataset):
@@ -191,20 +214,37 @@ class BasicNeRF(BaseEngine):
         focal = train_dataset.get_focal()
         
         for epoch in range(self.epoch):
-            print("======================= Epoch {} / {} =======================".format(epoch+1, self.epoch))
-            train_loss, elapsed_time = self.train_one_epoch(train_dataloader)
+            train_loss_dict, elapsed_time = self.train_one_epoch(train_dataloader)
         
-            print(f"{epoch+1} Train Loss: ", train_loss, "Time: ", elapsed_time)
+            print(f"{epoch+1} / {self.epoch} Train Loss", end=" ")
+            for k, v in train_loss_dict.items():
+                print(f"{k} - {v:6f}", end=" ")
+            print(f"Time: {elapsed_time:2f}")
             
             if self.scheduler is not None:
                 self.scheduler.step()
             
             # TODO tensorboard logging...
-            if self.writer is not None:
-                self.writer.add_scalar("Train Loss", train_loss, epoch)
+            # if self.writer is not None:
+                # self.writer.add_scalar("Train Loss", train_loss, epoch)
             
             if (epoch+1) % self.save_interval == 0:
-                save_checkpoints(self.nerf_coarse, self.nerf_fine, epoch, cfg['checkpoint_dir'])
+                ckpt = {
+                    'nerf_coarse': self.nerf_coarse.state_dict(),
+                    'nerf_fine': self.nerf_fine.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'scheduler': self.scheduler.state_dict(),
+                    'random_states': {
+                        'torch': torch.get_rng_state(),
+                        'numpy': np.random.get_state(),
+                        'python': random.getstate()
+                    }
+                }
+                save_checkpoints(ckpt_path=os.path.join(cfg['ckpt_dir'], f"ckpt_{epoch+1}.pt"),
+                                 ckpt=ckpt,
+                                 epoch=epoch+1,
+                                 train_loss=train_loss_dict,
+                                 val_loss=None)
     
     def evaluate(self, dataloader):
         pass

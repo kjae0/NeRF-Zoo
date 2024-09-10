@@ -1,0 +1,41 @@
+{'num_workers': 4, 'seed': 42, 'device': 'cuda', 'verbose': False, 'save_interval': 500, 'log_interval': 50, 'ckpt_dir': './ckpts', 'dataset': {'name': 'llff', 'base_dir': './data/nerf_llff_data', 'object': 'room', 'image_folder': 'images', 'factor': 8, 'image_preload': True, 'n_sample_rays': 1024, 'boundary_factor': 1.0, 'test_spiral': False}, 'model': {'name': 'basic_nerf', 'coarse_model_params': {'xyz_dim': 3, 'xyz_embedding_dim': 10, 'direction_dim': 3, 'direction_embedding_dim': 4, 'n_layers': 8, 'hidden_dim': 256, 'skip_concat_connection': [4], 'skip_connection': []}, 'fine_model_params': {'xyz_dim': 3, 'xyz_embedding_dim': 10, 'direction_dim': 3, 'direction_embedding_dim': 4, 'n_layers': 8, 'hidden_dim': 256, 'skip_concat_connection': [4], 'skip_connection': []}}, 'optimizer': {'name': 'adam', 'optimizer_params': {'lr': 0.0005, 'betas': [0.9, 0.999]}}, 'scheduler': {'name': 'step', 'scheduler_params': {'step_size': 250, 'gamma': 0.1}}, 'loss': {'name': 'l2'}, 'train': {'batch_size': 1, 'num_iterations': 200000, 'verbose': True, 'output_dir': './outputs', 'n_coarse_samples': 64, 'n_fine_samples': 128, 'white_bkgd': True}, 'test': {'test_only': False, 'test_spiral': False}}
+/home/diya/anaconda3/envs/tensorRT_JY/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3526.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+1 / 4878 Train Loss coarse train loss - 0.334979 fine train loss - 0.142590 Time: 6.762457
+2 / 4878 Train Loss coarse train loss - 0.336867 fine train loss - 0.037510 Time: 6.521713
+3 / 4878 Train Loss coarse train loss - 0.336013 fine train loss - 0.033497 Time: 6.562828
+4 / 4878 Train Loss coarse train loss - 0.335989 fine train loss - 0.032095 Time: 6.469099
+5 / 4878 Train Loss coarse train loss - 0.334354 fine train loss - 0.031478 Time: 6.561223
+6 / 4878 Train Loss coarse train loss - 0.336726 fine train loss - 0.028853 Time: 6.488318
+7 / 4878 Train Loss coarse train loss - 0.335930 fine train loss - 0.028681 Time: 6.582032
+8 / 4878 Train Loss coarse train loss - 0.334623 fine train loss - 0.026332 Time: 6.499254
+9 / 4878 Train Loss coarse train loss - 0.337905 fine train loss - 0.028235 Time: 6.533308
+10 / 4878 Train Loss coarse train loss - 0.337582 fine train loss - 0.028953 Time: 6.697870
+11 / 4878 Train Loss coarse train loss - 0.336698 fine train loss - 0.027247 Time: 6.561227
+12 / 4878 Train Loss coarse train loss - 0.336938 fine train loss - 0.026464 Time: 6.768968
+13 / 4878 Train Loss coarse train loss - 0.336462 fine train loss - 0.025512 Time: 6.819848
+14 / 4878 Train Loss coarse train loss - 0.336186 fine train loss - 0.025593 Time: 6.761702
+15 / 4878 Train Loss coarse train loss - 0.334853 fine train loss - 0.025127 Time: 6.947974
+16 / 4878 Train Loss coarse train loss - 0.334196 fine train loss - 0.024433 Time: 6.840781
+17 / 4878 Train Loss coarse train loss - 0.335208 fine train loss - 0.024465 Time: 7.112538
+18 / 4878 Train Loss coarse train loss - 0.334744 fine train loss - 0.024852 Time: 7.229696
+19 / 4878 Train Loss coarse train loss - 0.337647 fine train loss - 0.024129 Time: 7.406417
+20 / 4878 Train Loss coarse train loss - 0.337614 fine train loss - 0.023354 Time: 7.191234
+21 / 4878 Train Loss coarse train loss - 0.335834 fine train loss - 0.023816 Time: 7.149258
+22 / 4878 Train Loss coarse train loss - 0.334855 fine train loss - 0.024027 Time: 7.302807
+23 / 4878 Train Loss coarse train loss - 0.338024 fine train loss - 0.023507 Time: 7.274464
+24 / 4878 Train Loss coarse train loss - 0.336906 fine train loss - 0.024159 Time: 7.509471
+25 / 4878 Train Loss coarse train loss - 0.337400 fine train loss - 0.023722 Time: 8.970888
+26 / 4878 Train Loss coarse train loss - 0.335274 fine train loss - 0.023191 Time: 8.906941
+27 / 4878 Train Loss coarse train loss - 0.335783 fine train loss - 0.023038 Time: 8.759116
+28 / 4878 Train Loss coarse train loss - 0.336938 fine train loss - 0.022433 Time: 7.320370
+29 / 4878 Train Loss coarse train loss - 0.336932 fine train loss - 0.022982 Time: 7.366269
+30 / 4878 Train Loss coarse train loss - 0.335141 fine train loss - 0.022147 Time: 7.479515
+31 / 4878 Train Loss coarse train loss - 0.335153 fine train loss - 0.022572 Time: 8.163045
+32 / 4878 Train Loss coarse train loss - 0.335056 fine train loss - 0.022141 Time: 7.330673
+33 / 4878 Train Loss coarse train loss - 0.332986 fine train loss - 0.022270 Time: 7.435733
+34 / 4878 Train Loss coarse train loss - 0.336211 fine train loss - 0.022560 Time: 7.285253
+35 / 4878 Train Loss coarse train loss - 0.335026 fine train loss - 0.022025 Time: 7.381728
+36 / 4878 Train Loss coarse train loss - 0.335879 fine train loss - 0.022457 Time: 7.355420
+37 / 4878 Train Loss coarse train loss - 0.336203 fine train loss - 0.022291 Time: 7.291930
+38 / 4878 Train Loss coarse train loss - 0.335393 fine train loss - 0.022211 Time: 7.338072

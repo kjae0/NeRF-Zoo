@@ -1,9 +1,9 @@
 import torch
 
-def save_checkpoints(ckpt_path, model, optimizer, scheduler, epoch):
+def save_checkpoints(ckpt_path, ckpt, epoch, train_loss, val_loss=None):
     torch.save({
         'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict()
+        'checkpoint': ckpt,
+        'train_loss': train_loss,
+        'val_loss': val_loss
     }, ckpt_path)

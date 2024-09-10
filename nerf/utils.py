@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import numpy as np
 
@@ -29,16 +30,16 @@ def build_scheduler(cfg, optimizer):
 def raw2outputs(raw_rgb, raw_sigma, z_vals, rays_d, raw_noise_std=0, white_bkgd=False, pytest=False):
     """Transforms model's predictions to semantically meaningful values.
     Args:
-        raw_rgb: [num_rays, num_samples along ray, 3]. Prediction from model.
-        raw_sigma: [num_rays, num_samples along ray, 1]. Prediction from model.
-        z_vals: [num_rays, num_samples along ray]. Integration time.
-        rays_d: [num_rays, 3]. Direction of each ray.
+        raw_rgb: [batch_size, num_rays, num_samples along ray, 3]. Prediction from model.
+        raw_sigma: [batch_size,  num_rays, num_samples along ray, 1]. Prediction from model.
+        z_vals: [batch_size, num_rays, num_samples along ray]. Integration time.
+        rays_d: [batch_size, num_rays, 3]. Direction of each ray.
     Returns:
-        rgb_map: [num_rays, 3]. Estimated RGB color of a ray.
-        disp_map: [num_rays]. Disparity map. Inverse of depth map.
-        acc_map: [num_rays]. Sum of weights along each ray.
-        weights: [num_rays, num_samples]. Weights assigned to each sampled color.
-        depth_map: [num_rays]. Estimated distance to object.
+        rgb_map: [batch_size, num_rays, 3]. Estimated RGB color of a ray.
+        disp_map: [batch_size, num_rays]. Disparity map. Inverse of depth map.
+        acc_map: [batch_size, num_rays]. Sum of weights along each ray.
+        weights: [batch_size, num_rays, num_samples]. Weights assigned to each sampled color.
+        depth_map: [batch_size, num_rays]. Estimated distance to object.
     """
     raw = torch.concat([raw_rgb, raw_sigma], -1)
     raw2alpha = lambda raw, dists, act_fn=F.relu: 1.-torch.exp(-act_fn(raw)*dists)
@@ -59,10 +60,10 @@ def raw2outputs(raw_rgb, raw_sigma, z_vals, rays_d, raw_noise_std=0, white_bkgd=
             noise = np.random.rand(*list(raw[...,3].shape)) * raw_noise_std
             noise = torch.Tensor(noise)
 
-    alpha = raw2alpha(raw[...,3] + noise, dists)  # [N_rays, N_samples]
+    alpha = raw2alpha(raw[...,3] + noise, dists)  # [B, N_rays, N_samples]
     # weights = alpha * tf.math.cumprod(1.-alpha + 1e-10, -1, exclusive=True)
-    weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1)), 1.-alpha + 1e-10], -1), -1)[:, :-1]
-    rgb_map = torch.sum(weights[...,None] * rgb, -2)  # [N_rays, 3]
+    weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], alpha.shape[1], 1)), 1.-alpha + 1e-10], -1), -1)[:, :, :-1]
+    rgb_map = torch.sum(weights[...,None] * rgb, -2)  # [B, N_rays, 3]
 
     depth_map = torch.sum(weights * z_vals, -1)
     disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.sum(weights, -1))
@@ -107,9 +108,9 @@ def sample_pdf(bins, weights, N_samples, det=False, pytest=False):
 
     # cdf_g = tf.gather(cdf, inds_g, axis=-1, batch_dims=len(inds_g.shape)-2)
     # bins_g = tf.gather(bins, inds_g, axis=-1, batch_dims=len(inds_g.shape)-2)
-    matched_shape = [inds_g.shape[0], inds_g.shape[1], cdf.shape[-1]]
-    cdf_g = torch.gather(cdf.unsqueeze(1).expand(matched_shape), 2, inds_g)
-    bins_g = torch.gather(bins.unsqueeze(1).expand(matched_shape), 2, inds_g)
+    matched_shape = [inds_g.shape[0], inds_g.shape[1], inds_g.shape[2], cdf.shape[-1]]
+    cdf_g = torch.gather(cdf.unsqueeze(2).expand(matched_shape), 3, inds_g)
+    bins_g = torch.gather(bins.unsqueeze(2).expand(matched_shape), 3, inds_g)
 
     denom = (cdf_g[...,1]-cdf_g[...,0])
     denom = torch.where(denom<1e-5, torch.ones_like(denom), denom)

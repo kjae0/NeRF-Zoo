@@ -11,7 +11,7 @@ ckpt_dir: ./ckpts
 dataset:
   name: llff                    # Dataset class name
   base_dir: ./data/nerf_llff_data # Path to the dataset
-  object: fern                  # Object to render
+  object: room                  # Object to render
   image_folder: images          # Folder with images
   factor: 8                     # Resizing factor for images
   image_preload: true           # Whether to preload all images into memory
@@ -63,7 +63,7 @@ loss:
 
 # Training configuration
 train:
-  batch_size: 2                 # Batch size
+  batch_size: 1                 # Batch size
   num_iterations: 200000        # Number of epochs to train
   verbose: true                 # Whether to display progress bars
   output_dir: ./outputs         # Directory to save outputs/checkpoints

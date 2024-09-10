@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 
 import yaml
+import time
 import argparse
 
 from torch.utils.data import DataLoader
@@ -22,6 +23,14 @@ if __name__ == "__main__":
         
     print(cfg)
     cfg['dataset']['base_dir'] = os.path.join(cfg['dataset']['base_dir'], cfg['dataset']['object'])
+    time_date = f"{time.strftime('%Y%m%d-%H%M%S')}"
+    cfg['ckpt_dir'] = os.path.join(cfg['ckpt_dir'], cfg['dataset']['object'], time_date)
+    
+    if not os.path.exists(cfg['ckpt_dir']):
+        os.makedirs(cfg['ckpt_dir'])
+
+        with open(os.path.join(cfg['ckpt_dir'], 'config.yml'), 'w') as f:
+            yaml.dump(cfg, f)
     
     # Load the dataset
     # TODO test dataset for validation
