@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class EngineBase:
+class BaseEngine:
     def __init__():
         pass
     

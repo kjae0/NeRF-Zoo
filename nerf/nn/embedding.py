@@ -2,11 +2,12 @@ import math
 import torch
 import torch.nn as nn
 
-class PositionalEncoding(torch.nn.Module):
+class SinusoidalEmbedding(torch.nn.Module):
     def __init__(self, n_dim):
-        super(PositionalEncoding, self).__init__()
+        super(SinusoidalEmbedding, self).__init__()
         self.n_dim = n_dim
         self.exp = torch.FloatTensor([2 ** (i // 2) * math.pi for i in range(2 * n_dim)]).unsqueeze(0) # 1 x 2L
+        self.exp = nn.Parameter(self.exp, requires_grad=False)
 
     def forward(self, p):
         """
