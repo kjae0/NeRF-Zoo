@@ -246,5 +246,73 @@ class BasicNeRF(BaseEngine):
                                  train_loss=train_loss_dict,
                                  val_loss=None)
     
-    def evaluate(self, dataloader):
-        pass
+    def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False):
+        if render_train:
+            ray_origins, ray_directions, coords = dataset.ray_origins, dataset.ray_directions, dataset.coords
+            near, far = dataset.nears, dataset.fars
+        else: 
+            ray_origins, ray_directions, coords = dataset.get_spiral_rays(n_views=n_views, n_rots=n_rots)
+            near, far = dataset.nears.min()*.9, dataset.fars.max()*1.
+            near = torch.FloatTensor([near for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+            far = torch.FloatTensor([far for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+        # ray_origins -> n_views x (H*W) x 3
+        # ray_directions -> n_views x (H*W) x 3
+        # coords -> (H*W) x 2
+        
+            # Move testing data to GPU
+        H = dataset.get_H()
+        W = dataset.get_W()
+        K = dataset.get_K()
+
+        with torch.no_grad():
+            images = None
+            print(f"{ray_directions.shape[0]} images will be rendered.")
+
+            self.nerf_coarse.eval()
+            self.nerf_fine.eval()
+            
+            rendered = []
+            
+            if verbose:
+                frames = tqdm(range(0, ray_directions.shape[0], 1), ncols=100, desc="Rendering...")
+            else:
+                frames = range(0, ray_directions.shape[0], 1)
+            
+            for i in frames:
+                # TODO check near far
+                out = []
+                for j in range(0, ray_directions.shape[1], batch_size):
+                    ret = self.render(ray_origins[i:i+1, j:j+batch_size], ray_directions[i:i+1, j:j+batch_size], near[i:i+1], far[i:i+1])
+                    out.append(ret['fine_rgb_map'].cpu())
+                rendered.append(torch.concat(out, dim=1))
+                
+                # ret = self.render(ray_origins[i:i+batch_size], ray_directions[i:i+batch_size], near[i:i+batch_size], far[i:i+batch_size])
+                # out.append([ret['fine_rgb_map'].cpu(), ret['fine_disp_map'].cpu(), ret['fine_acc_map'].cpu()])
+                
+            self.nerf_coarse.train()
+            self.nerf_fine.train()
+            
+            # print('Done rendering', testsavedir)
+            # imageio.mimwrite(os.path.join(testsavedir, 'video.mp4'), to8b(rgbs), fps=30, quality=8)
+
+
+        # if savedir is not None:
+        #         rgb8 = to8b(rgbs[-1])
+        #         filename = os.path.join(savedir, '{:03d}.png'.format(i))
+        #         imageio.imwrite(filename, rgb8)
+
+
+        # rgbs = np.stack(rgbs, 0)
+        # disps = np.stack(disps, 0)
+
+        return rendered
+    
+    def load_state_dict(self, state_dict):
+        ckpt = state_dict['checkpoint']
+        self.nerf_coarse.load_state_dict(ckpt['nerf_coarse'])
+        self.nerf_fine.load_state_dict(ckpt['nerf_fine'])
+        self.optimizer.load_state_dict(ckpt['optimizer'])
+        self.scheduler.load_state_dict(ckpt['scheduler'])
+        
+        print(f"Loaded state dict from epoch {state_dict['epoch']}")
+        

@@ -6,7 +6,7 @@ from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-from datasets.utils import _move_rotation_matrix_axis, poses_avg
+from datasets.utils import _move_rotation_matrix_axis, poses_avg, normalize, render_path_spiral
 from nerf.ray import get_rays, get_all_rays
 
 
@@ -81,7 +81,7 @@ class LLFFDataset(Dataset):
     def get_focal(self):
         return self.focal
 
-    def _load_pose(self, pose_dir, image_shape, factor=8):
+    def _load_pose(self, pose_dir, image_shape, factor=8, recenter=True):
         poses_arr = np.load(pose_dir) # (N_images, 17) 15 for camera pose, 2 for near and far
         poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1, 2, 0]) # (3, 5, N_images)
         nears = poses_arr[:, -2:-1].transpose([1, 0]) # (1, N_images)
@@ -101,11 +101,11 @@ class LLFFDataset(Dataset):
         
         return images
 
-    def load_data(self, base_dir, factor=1, image_folder='images', image_preload=False, verbose=False):
+    def load_data(self, base_dir, recenter=True, factor=1, image_folder='images', image_preload=False, verbose=False):
         images = self._load_image(os.path.join(base_dir, image_folder))        
         image_shape = np.array(Image.open(images[0]).convert('RGB')).shape # (H, W, C)
         image_shape = (image_shape[0] // factor, image_shape[1] // factor)
-        poses, nears, fars = self._load_pose(os.path.join(base_dir, 'poses_bounds.npy'), image_shape)
+        poses, nears, fars = self._load_pose(os.path.join(base_dir, 'poses_bounds.npy'), image_shape, factor=factor, recenter=recenter)
         
         if image_preload:
             image_transform = transforms.Compose([
@@ -147,4 +147,43 @@ class LLFFDataset(Dataset):
         # print(image.shape, coords[:, 0].max(), coords[:, 1].max())
         targets = image[:, coords[:,0].long(), coords[:,1].long()]
 
-        return targets, pose, ray_origin, ray_directions, near, far
+        return targets, pose, ray_origin, ray_directions, near, far     
+
+    def get_spiral_poses(self, n_views=120, n_rots=2, path_zflat=False):
+        ## Get spiral
+        # Get average pose
+        up = normalize(self.poses[:, :3, 1].sum(0))
+
+        # Find a reasonable "focus depth" for this dataset
+        close_depth, inf_depth = self.nears.min()*.9, self.fars.max()*5.
+        dt = .75
+        mean_dz = 1./(((1.-dt)/close_depth + dt/inf_depth))
+        focal = mean_dz
+
+        # Get radii for spiral path
+        shrink_factor = .8
+        zdelta = close_depth * .2
+        tt = self.poses[:,:3,3] # ptstocam(poses[:3,3,:].T, c2w).T
+        rads = np.percentile(np.abs(tt), 90, 0)
+        c2w_path = self.c2w
+#         if path_zflat:
+# #             zloc = np.percentile(tt, 10, 0)[2]
+#             zloc = -close_depth * .1
+#             c2w_path[:3,3] = c2w_path[:3,3] + zloc * c2w_path[:3,2]
+#             rads[2] = 0.
+#             N_rots = 1
+#             N_views/=2
+
+        # Generate poses for spiral path
+        render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=n_rots, N=n_views)
+        render_poses = np.array(render_poses).astype(np.float32)
+        
+        return render_poses
+    
+    def get_spiral_rays(self, n_views=120, n_rots=2, path_zflat=False):
+        spiral_poses = self.get_spiral_poses(n_views, n_rots, path_zflat)
+        spiral_poses = torch.tensor(spiral_poses, dtype=torch.float32)
+        
+        ray_origins, ray_directions, coords = get_all_rays(self.H, self.W, self.get_K(), spiral_poses)
+        return ray_origins, ray_directions, coords, 
+    

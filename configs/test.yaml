@@ -70,6 +70,8 @@ train:
   n_coarse_samples: 64          # Number of stratified samples for the coarse network
   n_fine_samples: 128           # Number of samples for the fine network
   white_bkgd: true              # Use white background for training
+  perturb: 1.0                  # Standard deviation of noise added to raw predictions
+  raw_noise_std: 1.0
 
 # Testing configuration
 test:
