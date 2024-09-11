@@ -181,7 +181,7 @@ class LLFFDataset(Dataset):
         return render_poses
     
     def get_spiral_rays(self, n_views=120, n_rots=2, path_zflat=False):
-        spiral_poses = self.get_spiral_poses(n_views, n_rots, path_zflat)
+        spiral_poses = self.get_spiral_poses(n_views, n_rots, path_zflat)[:, :3, :4]
         spiral_poses = torch.tensor(spiral_poses, dtype=torch.float32)
         
         ray_origins, ray_directions, coords = get_all_rays(self.H, self.W, self.get_K(), spiral_poses)

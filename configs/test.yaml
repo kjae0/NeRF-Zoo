@@ -16,7 +16,7 @@ dataset:
   factor: 8                     # Resizing factor for images
   image_preload: true           # Whether to preload all images into memory
   n_sample_rays: 1024           # Number of rays to sample from each image (None means use all rays)
-  boundary_factor: 1.0          # Scaling factor for the boundary (optional)
+  boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
   n_sample_rays: 1024           # Number of rays to sample from each image (None means use all rays)
 
