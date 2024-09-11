@@ -20,7 +20,6 @@ def build_scheduler(cfg, optimizer):
     if cfg['name'] == 'none':
         return None
     elif cfg['name'] == 'step':
-        cfg['scheduler_params']['step_size'] *= 1000
         return torch.optim.lr_scheduler.StepLR(optimizer, **cfg['scheduler_params'])
     elif cfg['name'] == 'multisteplr':
         return torch.optim.lr_scheduler.MultiStepLR(optimizer, **cfg['scheduler_params'])
@@ -51,14 +50,8 @@ def raw2outputs(raw_rgb, raw_sigma, z_vals, rays_d, raw_noise_std=0, white_bkgd=
 
     rgb = torch.sigmoid(raw[...,:3])  # [N_rays, N_samples, 3]
     noise = 0.
-    if raw_noise_std > 0.:
-        noise = torch.randn(raw[...,3].shape) * raw_noise_std
 
-        # Overwrite randomly sampled data if pytest
-        if pytest:
-            np.random.seed(0)
-            noise = np.random.rand(*list(raw[...,3].shape)) * raw_noise_std
-            noise = torch.Tensor(noise)
+    noise = torch.randn(raw[...,3].shape) * raw_noise_std
 
     alpha = raw2alpha(raw[...,3] + noise, dists)  # [B, N_rays, N_samples]
     # weights = alpha * tf.math.cumprod(1.-alpha + 1e-10, -1, exclusive=True)
@@ -118,3 +111,10 @@ def sample_pdf(bins, weights, N_samples, det=False, pytest=False):
     samples = bins_g[...,0] + t * (bins_g[...,1]-bins_g[...,0])
 
     return samples
+
+def get_learning_rate(optimizer):
+    # PyTorch optimizers can have multiple parameter groups, each with its own learning rate.
+    # Here, we retrieve the learning rate of the first parameter group.
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
+    

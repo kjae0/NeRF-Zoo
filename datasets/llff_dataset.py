@@ -49,6 +49,13 @@ class LLFFDataset(Dataset):
         self.nears *= scale
         self.fars *= scale
         
+        if cfg['ndc']:
+            self.nears = np.zeros_like(self.nears)
+            self.fars = np.ones_like(self.fars)
+        else:
+            self.nears = (self.nears.min() * .9) * np.ones_like(self.nears)
+            self.fars = (self.fars.max() * 1.) * np.ones_like(self.fars)
+        
         self.c2w = poses_avg(self.poses)
         self.hwf = self.poses[0,:3,-1]
         self.H = int(self.hwf[0].item())
@@ -86,7 +93,7 @@ class LLFFDataset(Dataset):
         poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1, 2, 0]) # (3, 5, N_images)
         nears = poses_arr[:, -2:-1].transpose([1, 0]) # (1, N_images)
         fars = poses_arr[:, -1:].transpose([1, 0]) # (1, N_images)
-        
+            
         poses[:2, 4, :] = np.array(image_shape).reshape([2, 1])
         poses[2, 4, :] = poses[2, 4, :] / factor
 

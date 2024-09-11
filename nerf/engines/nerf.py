@@ -1,7 +1,7 @@
 from nerf.engines.base import BaseEngine
 from nerf.models import build_model
-from nerf.ray import get_rays
-from nerf.utils import build_loss_fn, build_optimizer, build_scheduler, raw2outputs, sample_pdf
+from nerf.ray import get_rays, ndc_rays
+from nerf.utils import build_loss_fn, build_optimizer, build_scheduler, raw2outputs, sample_pdf, get_learning_rate
 from src.utils import save_checkpoints
 
 from tqdm import tqdm
@@ -20,6 +20,7 @@ class BasicNeRF(BaseEngine):
         self.loss_fn = build_loss_fn(cfg['loss'])
         self.optimizer = build_optimizer(cfg['optimizer'], list(self.nerf_coarse.parameters()) + list(self.nerf_fine.parameters())) 
         self.scheduler = build_scheduler(cfg['scheduler'], self.optimizer)
+        print(f"Expected last learning rate: {cfg['optimizer']['optimizer_params']['lr'] * (cfg['scheduler']['scheduler_params']['gamma'] ** int(cfg['train']['num_epochs'] / cfg['scheduler']['scheduler_params']['step_size']))}")
         
         self.device = cfg['device']
         self.verbose = cfg['verbose']
@@ -29,6 +30,9 @@ class BasicNeRF(BaseEngine):
         self.n_coarse_samples = cfg['train']['n_coarse_samples']
         self.n_fine_samples = cfg['train']['n_fine_samples']
         self.white_bkgd = cfg['train']['white_bkgd']
+        self.perturb = cfg['train']['perturb']
+        self.raw_noise_std = cfg['train']['raw_noise_std']
+        self.ndc = cfg['dataset']['ndc']
         
         # tensorboard writer. optional.
         self.writer = writer
@@ -37,11 +41,16 @@ class BasicNeRF(BaseEngine):
         self.nerf_fine.to(self.device)
         self.loss_fn.to(self.device)
         
-    def render(self, rays_origin, rays_direction, near, far):
+    def render(self, rays_origin, rays_direction, near, far, ndc=False, perturb=0., raw_noise_std=0., hwf=None):
         # TODO validate ray and camera parameters
 
         # rays_origin = rays_origin.view(-1, 3)  # B*n_rays x 3
         # rays_direction = rays_direction.view(-1, 3)  # B*n_rays x 3
+        if ndc:
+            assert hwf is not None, "HWF is required for NDC rendering."
+            # def ndc_rays(H, W, focal, near, rays_o, rays_d):
+            H, W, focal = hwf
+            rays_origin, rays_direction = ndc_rays(H, W, focal, 1., rays_origin, rays_direction)
         
         near = near.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
         far = far.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
@@ -50,10 +59,9 @@ class BasicNeRF(BaseEngine):
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
         # viewdirs = torch.reshape(viewdirs, [-1,3]).float()
         viewdirs = viewdirs.float() # B x n_rays x 1
-        
         out = self.render_rays(rays_origin, rays_direction, viewdirs, near, far,
                                n_samples=self.n_coarse_samples, n_samples_importance=self.n_fine_samples,
-                               white_bkgd=self.white_bkgd)
+                               white_bkgd=self.white_bkgd, perturb=perturb, raw_noise_std=raw_noise_std)
 
         return out
 
@@ -87,7 +95,7 @@ class BasicNeRF(BaseEngine):
         mids = (z_vals[...,1:] + z_vals[...,:-1]) / 2
         uppers = torch.concat([mids, z_vals[...,-1:]], -1)
         lowers = torch.concat([z_vals[...,:1], mids], -1)
-        t_rand = torch.rand(z_vals.shape)
+        t_rand = torch.rand(z_vals.shape) * perturb
         z_vals = lowers + (uppers - lowers) * t_rand
 
         sampled_points = rays_origin[...,None,:] + rays_direction[...,None,:] * z_vals[...,:,None] # [n_rays, n_samples, 3]
@@ -148,10 +156,9 @@ class BasicNeRF(BaseEngine):
         
         return out_rgb, out_sigma
 
-    def train_one_epoch(self, dataloader):
+    def train_one_epoch(self, dataloader, hwf=None):
         self.nerf_coarse.train()
         self.nerf_fine.train()
-        
         # if self.verbose:
         #     dataloader = tqdm(dataloader, ncols=100, total=len(dataloader), desc="training...")
             
@@ -171,13 +178,14 @@ class BasicNeRF(BaseEngine):
             # ray_origins = ray_origins.to(self.device)
             # ray_directions = ray_directions.to(self.device) # B x n_rays x 3
             
-            out = self.render(ray_origins, ray_directions, near, far)
+            out = self.render(ray_origins, ray_directions, near, far, 
+                              perturb=self.perturb, raw_noise_std=self.raw_noise_std, ndc=self.ndc, hwf=hwf)
             coarse = out['coarse_rgb_map'] # B x n_rays x 3
             fine = out['fine_rgb_map'] # B x n_rays x 3
             
             coarse = coarse.to(self.device)
             fine = fine.to(self.device)
-
+            
             coarse_loss = self.loss_fn(coarse, targets)
             fine_loss = self.loss_fn(fine, targets)
             loss = coarse_loss + fine_loss
@@ -199,9 +207,6 @@ class BasicNeRF(BaseEngine):
             
         
     def train(self, cfg, train_dataset):
-        cfg['train']['num_epochs'] = int(cfg['train']['num_iterations'] / len(train_dataset) * cfg['train']['batch_size'])
-        self.epoch = cfg['train']['num_epochs']
-        
         train_dataloader = DataLoader(train_dataset, 
                                   batch_size=cfg['train']['batch_size'], 
                                   shuffle=True,
@@ -213,13 +218,13 @@ class BasicNeRF(BaseEngine):
         K = train_dataset.get_K()
         focal = train_dataset.get_focal()
         
-        for epoch in range(self.epoch):
-            train_loss_dict, elapsed_time = self.train_one_epoch(train_dataloader)
+        for epoch in range(cfg['train']['num_epochs']):
+            train_loss_dict, elapsed_time = self.train_one_epoch(train_dataloader, hwf=(H, W, focal))
         
-            print(f"{epoch+1} / {self.epoch} Train Loss", end=" ")
+            print(f"{epoch+1} / {cfg['train']['num_epochs']} Train Loss", end=" ")
             for k, v in train_loss_dict.items():
                 print(f"{k} - {v:6f}", end=" ")
-            print(f"Time: {elapsed_time:2f}")
+            print(f"Time: {elapsed_time:2f} Lr: {get_learning_rate(self.optimizer)}")
             
             if self.scheduler is not None:
                 self.scheduler.step()
@@ -252,7 +257,7 @@ class BasicNeRF(BaseEngine):
             near, far = dataset.nears, dataset.fars
         else: 
             ray_origins, ray_directions, coords = dataset.get_spiral_rays(n_views=n_views, n_rots=n_rots)
-            near, far = dataset.nears.min()*.9, dataset.fars.max()*1.
+            near, far = 0., 1.
             near = torch.FloatTensor([near for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
             far = torch.FloatTensor([far for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
         # ray_origins -> n_views x (H*W) x 3
@@ -263,6 +268,7 @@ class BasicNeRF(BaseEngine):
         H = dataset.get_H()
         W = dataset.get_W()
         K = dataset.get_K()
+        focal = dataset.get_focal()
 
         with torch.no_grad():
             images = None
@@ -282,7 +288,8 @@ class BasicNeRF(BaseEngine):
                 # TODO check near far
                 out = []
                 for j in range(0, ray_directions.shape[1], batch_size):
-                    ret = self.render(ray_origins[i:i+1, j:j+batch_size], ray_directions[i:i+1, j:j+batch_size], near[i:i+1], far[i:i+1])
+                    ret = self.render(ray_origins[i:i+1, j:j+batch_size], ray_directions[i:i+1, j:j+batch_size], near[i:i+1], far[i:i+1], 
+                                      perturb=0., raw_noise_std=0., ndc=self.ndc, hwf=(H, W, focal))
                     out.append(ret['fine_rgb_map'].cpu())
                 rendered.append(torch.concat(out, dim=1))
                 

@@ -19,6 +19,7 @@ dataset:
   boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
   n_sample_rays: 1024           # Number of rays to sample from each image (None means use all rays)
+  ndc: true
 
 
 # Model configuration
@@ -54,8 +55,8 @@ optimizer:
 scheduler:
   name: step                    # Scheduler type (step, cosine, etc.)
   scheduler_params:
-    step_size: 250               # Number of steps to reduce learning rate
-    gamma: 0.1                   # Multiplicative factor of learning rate decay
+    step_size: 400               # Number of steps to reduce learning rate
+    gamma: 0.95                   # Multiplicative factor of learning rate decay
 
 # Loss function configuration
 loss:
@@ -64,7 +65,7 @@ loss:
 # Training configuration
 train:
   batch_size: 2                 # Batch size
-  num_iterations: 200000        # Number of epochs to train
+  num_epochs: 20000             # Number of epochs to train
   verbose: true                 # Whether to display progress bars
   output_dir: ./outputs         # Directory to save outputs/checkpoints
   n_coarse_samples: 64          # Number of stratified samples for the coarse network

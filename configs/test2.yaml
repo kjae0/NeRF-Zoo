@@ -11,7 +11,7 @@ ckpt_dir: ./ckpts
 dataset:
   name: llff                    # Dataset class name
   base_dir: ./data/nerf_llff_data # Path to the dataset
-  object: room                  # Object to render
+  object: fern                  # Object to render
   image_folder: images          # Folder with images
   factor: 8                     # Resizing factor for images
   image_preload: true           # Whether to preload all images into memory
@@ -19,6 +19,7 @@ dataset:
   boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
   n_sample_rays: 1024           # Number of rays to sample from each image (None means use all rays)
+  ndc: false
 
 
 # Model configuration
