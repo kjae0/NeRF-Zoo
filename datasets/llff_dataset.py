@@ -49,14 +49,22 @@ class LLFFDataset(Dataset):
         self.nears *= scale
         self.fars *= scale
         
+        self.c2w = poses_avg(self.poses)
+        n_views = 120
+        n_rots = 2
+        path_zflat = False
+        self.spiral_poses = self.get_spiral_poses(n_views, n_rots, path_zflat)[:, :3, :4]
+        self.spiral_poses = torch.tensor(self.spiral_poses, dtype=torch.float32)
+        
         if cfg['ndc']:
             self.nears = np.zeros_like(self.nears)
             self.fars = np.ones_like(self.fars)
         else:
             self.nears = (self.nears.min() * .9) * np.ones_like(self.nears)
             self.fars = (self.fars.max() * 1.) * np.ones_like(self.fars)
+        self.nears = torch.tensor(self.nears, dtype=torch.float32)
+        self.fars = torch.tensor(self.fars, dtype=torch.float32)
         
-        self.c2w = poses_avg(self.poses)
         self.hwf = self.poses[0,:3,-1]
         self.H = int(self.hwf[0].item())
         self.W = int(self.hwf[1].item())
@@ -187,10 +195,8 @@ class LLFFDataset(Dataset):
         
         return render_poses
     
-    def get_spiral_rays(self, n_views=120, n_rots=2, path_zflat=False):
-        spiral_poses = self.get_spiral_poses(n_views, n_rots, path_zflat)[:, :3, :4]
-        spiral_poses = torch.tensor(spiral_poses, dtype=torch.float32)
+    def get_spiral_rays(self):
+        ray_origins, ray_directions, coords = get_all_rays(self.H, self.W, self.get_K(), self.spiral_poses)
         
-        ray_origins, ray_directions, coords = get_all_rays(self.H, self.W, self.get_K(), spiral_poses)
         return ray_origins, ray_directions, coords, 
     

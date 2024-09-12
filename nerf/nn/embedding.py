@@ -18,7 +18,7 @@ class SinusoidalEmbedding(torch.nn.Module):
         p = p.unsqueeze(2) # B x input_dim x 1
         p = (p * self.exp).view(B, -1)
         
-        for i in range(self.n_dim):
+        for i in range(p.shape[1] // 2):
             p[:, 2 * i] = torch.sin(p[:, 2 * i])
             p[:, 2 * i + 1] = torch.cos(p[:, 2 * i + 1])
         

@@ -29,7 +29,7 @@ if __name__ == "__main__":
     if not os.path.exists(cfg['ckpt_dir']):
         os.makedirs(cfg['ckpt_dir'])
 
-        with open(os.path.join(cfg['ckpt_dir'], 'config.yml'), 'w') as f:
+        with open(os.path.join(cfg['ckpt_dir'], 'config.yaml'), 'w') as f:
             yaml.dump(cfg, f)
     
     # Load the dataset

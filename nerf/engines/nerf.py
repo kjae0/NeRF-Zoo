@@ -50,6 +50,7 @@ class BasicNeRF(BaseEngine):
             assert hwf is not None, "HWF is required for NDC rendering."
             # def ndc_rays(H, W, focal, near, rays_o, rays_d):
             H, W, focal = hwf
+            
             rays_origin, rays_direction = ndc_rays(H, W, focal, 1., rays_origin, rays_direction)
         
         near = near.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
@@ -57,6 +58,7 @@ class BasicNeRF(BaseEngine):
         
         viewdirs = rays_direction
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
+        
         # viewdirs = torch.reshape(viewdirs, [-1,3]).float()
         viewdirs = viewdirs.float() # B x n_rays x 1
         out = self.render_rays(rays_origin, rays_direction, viewdirs, near, far,
@@ -251,20 +253,25 @@ class BasicNeRF(BaseEngine):
                                  train_loss=train_loss_dict,
                                  val_loss=None)
     
-    def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False):
+    def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False, test=None):
         if render_train:
             ray_origins, ray_directions, coords = dataset.ray_origins, dataset.ray_directions, dataset.coords
             near, far = dataset.nears, dataset.fars
         else: 
-            ray_origins, ray_directions, coords = dataset.get_spiral_rays(n_views=n_views, n_rots=n_rots)
-            near, far = 0., 1.
-            near = torch.FloatTensor([near for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
-            far = torch.FloatTensor([far for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+            ray_origins, ray_directions, coords = dataset.get_spiral_rays()
+            near = torch.FloatTensor([dataset.nears[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+            far = torch.FloatTensor([dataset.fars[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
         # ray_origins -> n_views x (H*W) x 3
         # ray_directions -> n_views x (H*W) x 3
         # coords -> (H*W) x 2
         
             # Move testing data to GPU
+        if test:
+            ray_origins = ray_origins[:test]
+            ray_directions = ray_directions[:test]
+            near = near[:test]
+            far = far[:test]
+            
         H = dataset.get_H()
         W = dataset.get_W()
         K = dataset.get_K()
