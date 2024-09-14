@@ -2,7 +2,8 @@ from nerf.engines.base import BaseEngine
 from nerf.models import build_model
 from nerf.ray import get_rays, ndc_rays
 from nerf.utils import build_loss_fn, build_optimizer, build_scheduler, raw2outputs, sample_pdf, get_learning_rate
-from src.utils import save_checkpoints
+from src.utils import save_checkpoints, save_images
+from src.metrics import calculate_psnr, calculate_mse
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -94,11 +95,12 @@ class BasicNeRF(BaseEngine):
         # z_vals = torch.stack([z_vals for _ in range(n_rays)], dim=0) # [n_rays, n_samples]
 
         # add perturbation
-        mids = (z_vals[...,1:] + z_vals[...,:-1]) / 2
-        uppers = torch.concat([mids, z_vals[...,-1:]], -1)
-        lowers = torch.concat([z_vals[...,:1], mids], -1)
-        t_rand = torch.rand(z_vals.shape) * perturb
-        z_vals = lowers + (uppers - lowers) * t_rand
+        if perturb > 0.:
+            mids = (z_vals[...,1:] + z_vals[...,:-1]) / 2
+            uppers = torch.concat([mids, z_vals[...,-1:]], -1)
+            lowers = torch.concat([z_vals[...,:1], mids], -1)
+            t_rand = torch.rand(z_vals.shape) * perturb
+            z_vals = lowers + (uppers - lowers) * t_rand
 
         sampled_points = rays_origin[...,None,:] + rays_direction[...,None,:] * z_vals[...,:,None] # [n_rays, n_samples, 3]
         
@@ -171,7 +173,7 @@ class BasicNeRF(BaseEngine):
         n_iters = 0
         
         for iter, (targets, pose, ray_origins, ray_directions, near, far) in enumerate(dataloader):
-            targets = targets.to(self.device) # B x 3 x n_rays 
+            # targets = targets.to(self.device) # B x 3 x n_rays 
             targets = targets.permute(0, 2, 1) # B x n_rays x 3
             
             # pose = pose.to(self.device)
@@ -185,8 +187,8 @@ class BasicNeRF(BaseEngine):
             coarse = out['coarse_rgb_map'] # B x n_rays x 3
             fine = out['fine_rgb_map'] # B x n_rays x 3
             
-            coarse = coarse.to(self.device)
-            fine = fine.to(self.device)
+            # coarse = coarse.to(self.device)
+            # fine = fine.to(self.device)
             
             coarse_loss = self.loss_fn(coarse, targets)
             fine_loss = self.loss_fn(fine, targets)
@@ -208,7 +210,7 @@ class BasicNeRF(BaseEngine):
                 'fine train loss': train_loss_fine / n_iters}, time.time() - s
             
         
-    def train(self, cfg, train_dataset):
+    def train(self, cfg, train_dataset, test_dataset):
         train_dataloader = DataLoader(train_dataset, 
                                   batch_size=cfg['train']['batch_size'], 
                                   shuffle=True,
@@ -231,9 +233,24 @@ class BasicNeRF(BaseEngine):
             if self.scheduler is not None:
                 self.scheduler.step()
             
+            # evaluate
+            if (epoch+1) % cfg['test']['eval_interval'] == 0: 
+                metric_dict = {'MSE': calculate_mse, 'PSNR': calculate_psnr}
+                perf, preds, gts, elapsed_time = self.evaluate(cfg, test_dataset, metric_dict, hwf=(H, W, focal))
+
+                print(f"\n{epoch+1} / {cfg['train']['num_epochs']} Eval Results")
+                for k, v in perf.items():
+                    print(f"{k}: {v}")
+                print(f"Time: {elapsed_time:2f}\n")
+                
+                if cfg['test']['save_rendered']:
+                    save_images(os.path.join(cfg['ckpt_dir'], "images"), preds, gts)
+            
             # TODO tensorboard logging...
             # if self.writer is not None:
                 # self.writer.add_scalar("Train Loss", train_loss, epoch)
+                
+            # TODO sprial rendering
             
             if (epoch+1) % self.save_interval == 0:
                 ckpt = {
@@ -330,3 +347,59 @@ class BasicNeRF(BaseEngine):
         
         print(f"Loaded state dict from epoch {state_dict['epoch']}")
         
+    def evaluate(self, cfg, test_dataset, metric_dict, hwf=None):
+        if hwf == None:
+            H = test_dataset.get_H()
+            W = test_dataset.get_W()
+            K = test_dataset.get_K()
+            focal = test_dataset.get_focal()
+            hwf = (H, W, focal)
+        else:
+            H, W, focal = hwf
+            
+        s = time.time()
+        
+        self.nerf_coarse.eval()
+        self.nerf_fine.eval()
+        
+        gts = []
+        preds = []
+        
+        with torch.no_grad():
+            for i in range(len(test_dataset)):
+                target, pose, ray_origin, ray_direction, near, far = test_dataset.__getitem__(i, eval=True)
+                target = target.view(3, -1) # 3 x n_rays
+                # ray_origin -> n_rays x 3
+                # ray_direction -> n_rays x 3
+                # near -> 1
+                # far -> 1
+                
+                pred = []
+                for j in range(0, target.shape[-1], cfg['test']['chunk_size']):
+                    ray_origin_chunk = ray_origin[j:j+cfg['test']['chunk_size']].unsqueeze(0)
+                    ray_direction_chunk = ray_direction[j:j+cfg['test']['chunk_size']].unsqueeze(0)
+
+                    out = self.render(ray_origin_chunk, ray_direction_chunk, near, far, 
+                                        perturb=0., raw_noise_std=0., ndc=self.ndc, hwf=hwf)
+                
+                    fine = out['fine_rgb_map'] # 1 x chunk_size x 3
+                    pred.append(fine)
+                    
+                pred = torch.concat(pred, dim=1) # 1 x n_rays x 3
+                gts.append(target.view(3, H, W))
+                preds.append(pred.view(H, W, 3).permute(2, 0, 1))
+            
+        perf = {}
+        for k, v in metric_dict.items():
+            if k not in perf:
+                perf[k] = 0
+            for i in range(len(gts)):
+                perf[k] += v(gts[i], preds[i])
+        
+        for k, v in perf.items():
+            perf[k] /= len(gts)
+            
+        elapsed_time = time.time() - s
+        
+        return perf, preds, gts, elapsed_time
+    

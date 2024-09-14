@@ -23,8 +23,8 @@ if __name__ == "__main__":
         
     print(cfg)
     cfg['dataset']['base_dir'] = os.path.join(cfg['dataset']['base_dir'], cfg['dataset']['object'])
-    time_date = f"{time.strftime('%Y%m%d-%H%M%S')}"
-    cfg['ckpt_dir'] = os.path.join(cfg['ckpt_dir'], cfg['dataset']['object'], time_date)
+    ckpt_name = f"{args.cfg_dir.split('/')[-1].split('.')[0]}_{time.strftime('%Y%m%d-%H%M%S')}"
+    cfg['ckpt_dir'] = os.path.join(cfg['ckpt_dir'], cfg['dataset']['object'], ckpt_name)
     
     if not os.path.exists(cfg['ckpt_dir']):
         os.makedirs(cfg['ckpt_dir'])
@@ -34,10 +34,10 @@ if __name__ == "__main__":
     
     # Load the dataset
     # TODO test dataset for validation
-    train_dataset = build_dataset(cfg['dataset'], test_spiral=cfg['test']['test_spiral'])
+    train_dataset, test_dataset = build_dataset(cfg['dataset'], test_spiral=cfg['test']['test_spiral'])
     
     # TODO DDP / DataParallel
     engine = build_engine(cfg)
-    engine.train(cfg, train_dataset)
+    engine.train(cfg, train_dataset, test_dataset)
     
     

@@ -1,5 +1,5 @@
 # global configuration
-num_workers: 8                # Number of workers for DataLoader
+num_workers: 4                # Number of workers for DataLoader
 seed: 42                      # Random seed for reproducibility
 device: cuda                  # Device to use (cpu, cuda, cuda:0, etc.)
 verbose: false                # Whether to display progress bars
@@ -11,14 +11,14 @@ ckpt_dir: ./ckpts
 dataset:
   name: llff                    # Dataset class name
   base_dir: ./data/nerf_llff_data # Path to the dataset
-  object: trex                  # Object to render
+  object: fern                  # Object to render
   image_folder: images          # Folder with images
   factor: 8                      # Resizing factor for images
   image_preload: true           # Whether to preload all images into memory
   n_sample_rays: 2048           # Number of rays to sample from each image (None means use all rays)
   boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
-  ndc: false
+  ndc: true
   train_test_split:
     test_size: 0.2
     uniform_interval: true

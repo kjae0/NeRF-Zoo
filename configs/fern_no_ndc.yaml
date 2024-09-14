@@ -19,6 +19,9 @@ dataset:
   boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
   ndc: false
+  train_test_split:
+    test_size: 0.2
+    uniform_interval: true
 
 
 # Model configuration
@@ -75,18 +78,8 @@ train:
 
 # Testing configuration
 test:
+  chunk_size: 1024
+  eval_interval: 100
   test_only: false              # Only run testing without training
   test_spiral: false            # If set to true, test with spiral path instead of regular
-
-# Ray sampling configuration
-# ray_sampling:
-#   n_samples: 64                 # Number of stratified samples for the coarse network
-#   n_samples_importance: 64       # Number of samples for the fine network
-#   perturb: true                 # Whether to add noise to stratified samples
-#   raw_noise_std: 0.1            # Standard deviation of noise added to raw predictions
-
-# # Logging and visualization
-# logging:
-#   tensorboard: true             # Enable TensorBoard logging
-#   log_dir: ./logs               # TensorBoard log directory
-#   log_train_loss: true          # Log the training loss
+  save_rendered: true           # Save rendered images

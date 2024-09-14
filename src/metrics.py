@@ -36,3 +36,5 @@ def calculate_mse(img1, img2):
     mse = F.mse_loss(img1, img2)
     
     return mse
+
+

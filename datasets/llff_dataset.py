@@ -6,7 +6,7 @@ from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-from datasets.utils import _move_rotation_matrix_axis, poses_avg, normalize, render_path_spiral
+from datasets.utils import _move_rotation_matrix_axis, poses_avg, normalize, render_path_spiral, recenter_poses
 from nerf.ray import get_rays, get_all_rays
 
 
@@ -24,15 +24,12 @@ class LLFFDataset(Dataset):
                 transforms.Resize((image_shape[0] // cfg['factor'], image_shape[1] // cfg['factor'])),
                 transforms.ToTensor()
             ])
-        
-        self.poses = torch.tensor(self.poses, dtype=torch.float32)
-        self.nears = torch.tensor(self.nears, dtype=torch.float32)
-        self.fars = torch.tensor(self.fars, dtype=torch.float32)
                 
         # Batch first
-        self.poses = _move_rotation_matrix_axis(self.poses)
-        self.nears = self.nears.permute(1, 0)
-        self.fars = self.fars.permute(1, 0)
+        self.poses = np.concatenate([self.poses[:, 1:2, :], -self.poses[:, 0:1, :], self.poses[:, 2:, :]], 1)
+        self.poses = np.moveaxis(self.poses, -1, 0).astype(np.float32)
+        self.fars = np.moveaxis(self.fars, -1, 0).astype(np.float32)
+        self.nears = np.moveaxis(self.nears, -1, 0).astype(np.float32) 
         
         assert len(self.images) == len(self.poses) == len(self.nears) == len(self.fars), \
             'Number of images, poses, nears, and fars are not the same! got {}, {}, {}, {}'.format(
@@ -48,6 +45,12 @@ class LLFFDataset(Dataset):
         self.poses[:, :3, 3] *= scale
         self.nears *= scale
         self.fars *= scale
+        
+        self.poses = recenter_poses(self.poses)
+        
+        self.poses = torch.tensor(self.poses, dtype=torch.float32)
+        self.nears = torch.tensor(self.nears, dtype=torch.float32)
+        self.fars = torch.tensor(self.fars, dtype=torch.float32)
         
         self.c2w = poses_avg(self.poses)
         n_views = 120
@@ -99,8 +102,9 @@ class LLFFDataset(Dataset):
     def _load_pose(self, pose_dir, image_shape, factor=8, recenter=True):
         poses_arr = np.load(pose_dir) # (N_images, 17) 15 for camera pose, 2 for near and far
         poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1, 2, 0]) # (3, 5, N_images)
-        nears = poses_arr[:, -2:-1].transpose([1, 0]) # (1, N_images)
-        fars = poses_arr[:, -1:].transpose([1, 0]) # (1, N_images)
+        bounds = poses_arr[:, -2:].transpose([1, 0]) # (2, N_images) 
+        nears = bounds[:1, :] # (1, N_images)
+        fars = bounds[1:2, :] # (1, N_images)
             
         poses[:2, 4, :] = np.array(image_shape).reshape([2, 1])
         poses[2, 4, :] = poses[2, 4, :] / factor
@@ -142,7 +146,7 @@ class LLFFDataset(Dataset):
     def __len__(self):
         return len(self.images)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, eval=False):
         if self.image_preload:
             image = self.images[idx]
         else:            
@@ -154,7 +158,7 @@ class LLFFDataset(Dataset):
         ray_directions = self.ray_directions[idx]
         coords = self.coords
         
-        if self.n_sample_rays is not None:
+        if self.n_sample_rays is not None and not eval:
             indices = torch.randperm(ray_origin.shape[0])[:self.n_sample_rays]
             ray_origin = ray_origin[indices]
             ray_directions = ray_directions[indices]

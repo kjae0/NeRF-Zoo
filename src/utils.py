@@ -1,6 +1,7 @@
-import cv2
+import os
 import torch
 import numpy as np
+import imageio
 
 def save_checkpoints(ckpt_path, ckpt, epoch, train_loss, val_loss=None):
     torch.save({
@@ -10,6 +11,32 @@ def save_checkpoints(ckpt_path, ckpt, epoch, train_loss, val_loss=None):
         'val_loss': val_loss
     }, ckpt_path)
 
+def save_images(save_dir, images, ground_truth=None):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    for i, image in enumerate(images):
+        image = np.array(image)
+        if image.shape[0] == 3:
+            image = np.transpose(image, (1, 2, 0))
+        
+        # Convert pixel values from [0, 1] to [0, 255]
+        image = (image * 255).astype(np.uint8)
+        
+        # Save the image using imageio
+        imageio.imwrite(os.path.join(save_dir, f"{i}.png"), image)
+    
+    if ground_truth:
+        for i, image in enumerate(ground_truth):
+            image = np.array(image)
+            if image.shape[0] == 3:
+                image = np.transpose(image, (1, 2, 0))
+            
+            # Convert pixel values from [0, 1] to [0, 255]
+            image = (image * 255).astype(np.uint8)
+            
+            # Save the image using imageio
+            imageio.imwrite(os.path.join(save_dir, f"gt_{i}.png"), image)
 
 # def images_to_video(images, out_path=None):
     
