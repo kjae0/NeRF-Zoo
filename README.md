@@ -1,4 +1,4 @@
-# NeRF Zoo
+![fern](https://github.com/user-attachments/assets/77de8290-40ee-4c30-835f-a3d48eeee9b1)# NeRF Zoo
 
 Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 Pretrained weights will be provided soon!
@@ -24,5 +24,5 @@ You can easily customize ..... modifying engine and model....
 
 | Fern | Flower | T-Rex |
 |-|-|-|
-| ![](/assests/fern.gif) | ![](/assests/fern.gif) | ![](/assests/fern.gif) |
+| ![fern](https://github.com/user-attachments/assets/51c47e32-cc72-4a93-a314-8ad4b2ba1229) | ![fern](https://github.com/user-attachments/assets/51c47e32-cc72-4a93-a314-8ad4b2ba1229) | ![fern](https://github.com/user-attachments/assets/ab6d170f-6be0-4155-885d-c2b541de2d41) |
 
