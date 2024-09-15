@@ -4,7 +4,7 @@ Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 Pretrained weights will be provided soon!
 
 
-The main objective of this repository is easy-to-customize and extensibility.<br>
+The main objective of this repository is to make nerf easy-to-customize and extensible.<br>
 
 ## Structure
 You can easily customize ..... modifying engine and model....
