@@ -39,9 +39,19 @@ def save_images(save_dir, images, ground_truth=None):
             # Save the image using imageio
             imageio.imwrite(os.path.join(save_dir, f"gt_{i}.png"), image)
 
-# def images_to_video(images, out_path=None):
-    
-#     if out_path:
+def save_gif(save_dir, images):
+    img_for_gif = []
+    for i, image in enumerate(images):
+        image = np.array(image)
+        if image.shape[0] == 3:
+            image = np.transpose(image, (1, 2, 0))
+        
+        # Convert pixel values from [0, 1] to [0, 255]
+        image = (image * 255).astype(np.uint8)
+        img_for_gif.append(image)
+        
+        # Save the image using imageio
+    imageio.mimsave(save_dir, img_for_gif, fps=5)
         
 def images_to_video(images, output_video_path, fps=30):
         height, width = images[0].shape[:2]
@@ -61,4 +71,3 @@ def images_to_video(images, output_video_path, fps=30):
 
         # Release the video writer
         video.release()
-        

@@ -20,7 +20,7 @@ dataset:
   test_spiral: false            # Use spiral path for testing
   ndc: true
   train_test_split:
-    test_size: 0.2
+    test_size: 0.1
     uniform_interval: true
 
 
