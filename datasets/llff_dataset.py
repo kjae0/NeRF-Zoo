@@ -164,6 +164,7 @@ class LLFFDataset(Dataset):
             ray_directions = ray_directions[indices]
             coords = coords[indices]
         # print(image.shape, coords[:, 0].max(), coords[:, 1].max())
+        # print(image.shape)
         targets = image[:, coords[:,0].long(), coords[:,1].long()]
 
         return targets, pose, ray_origin, ray_directions, near, far     

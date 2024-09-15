@@ -47,6 +47,12 @@ class BasicNeRF(BaseEngine):
 
         # rays_origin = rays_origin.view(-1, 3)  # B*n_rays x 3
         # rays_direction = rays_direction.view(-1, 3)  # B*n_rays x 3
+        viewdirs = rays_direction
+        viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
+        
+        # viewdirs = torch.reshape(viewdirs, [-1,3]).float()
+        viewdirs = viewdirs.float() # B x n_rays x 1
+        
         if ndc:
             assert hwf is not None, "HWF is required for NDC rendering."
             # def ndc_rays(H, W, focal, near, rays_o, rays_d):
@@ -57,11 +63,6 @@ class BasicNeRF(BaseEngine):
         near = near.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
         far = far.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
         
-        viewdirs = rays_direction
-        viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
-        
-        # viewdirs = torch.reshape(viewdirs, [-1,3]).float()
-        viewdirs = viewdirs.float() # B x n_rays x 1
         out = self.render_rays(rays_origin, rays_direction, viewdirs, near, far,
                                n_samples=self.n_coarse_samples, n_samples_importance=self.n_fine_samples,
                                white_bkgd=self.white_bkgd, perturb=perturb, raw_noise_std=raw_noise_std)
@@ -270,14 +271,18 @@ class BasicNeRF(BaseEngine):
                                  train_loss=train_loss_dict,
                                  val_loss=None)
     
-    def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False, test=None):
+    def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False, test=None, near=None, far=None):
         if render_train:
             ray_origins, ray_directions, coords = dataset.ray_origins, dataset.ray_directions, dataset.coords
             near, far = dataset.nears, dataset.fars
         else: 
             ray_origins, ray_directions, coords = dataset.get_spiral_rays()
-            near = torch.FloatTensor([dataset.nears[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
-            far = torch.FloatTensor([dataset.fars[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+            if near:
+                near = torch.FloatTensor([near for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+                far = torch.FloatTensor([far for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+            else:
+                near = torch.FloatTensor([dataset.nears[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
+                far = torch.FloatTensor([dataset.fars[0] for _ in range(ray_directions.shape[0])]).unsqueeze(-1) # B x 1
         # ray_origins -> n_views x (H*W) x 3
         # ray_directions -> n_views x (H*W) x 3
         # coords -> (H*W) x 2

@@ -20,7 +20,7 @@ dataset:
   test_spiral: false            # Use spiral path for testing
   ndc: true
   train_test_split:
-    test_size: 0.2
+    test_size: 0.1
     uniform_interval: true
 
 
@@ -50,7 +50,7 @@ model:
 optimizer:
   name: adam                    # Type of optimizer (adam, sgd, etc.)
   optimizer_params:
-    lr: 0.001                  # Learning rate
+    lr: 0.001                   # Learning rate
     betas: [0.9, 0.999]         # Adam's beta parameters
 
 # Scheduler configuration
