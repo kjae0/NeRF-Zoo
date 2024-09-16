@@ -6,6 +6,10 @@ Pretrained weights will be provided soon!
 
 The main objective of this repository is to make nerf easy-to-customize and extensible.<br>
 
+## Todo
+- refactoring
+- dataset for blender... etc
+
 ## Structure
 You can easily customize ..... modifying engine and model....
 
