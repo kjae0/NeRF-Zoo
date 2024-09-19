@@ -16,8 +16,8 @@ You can easily customize ..... modifying engine and model....
 ## Pretrained Weights
 | Model Name | Dataset | PSNR | SSIM | Weights |
 |-|-|-|-|-|
-| NeRF | LLFF (Fern) | Nan | Nan | [Download](#) |
-| NeRF | LLFF (T-Rex) | Nan | Nan | [Download](#) |
+| NeRF | LLFF (Fern) | Nan | Nan | [GDrive Download](https://drive.google.com/file/d/1Z6UcMTHRz9CoycvbDkbHPmdDgaYlKHlc/view?usp=drive_link) |
+| NeRF | LLFF (T-Rex) | Nan | Nan | [Download](https://drive.google.com/file/d/1J2EwG785t0Ws1Ko18RDWC80e9W8iG-Uu/view?usp=drive_link) |
 | NeRF | LLFF (Flower) | Nan | Nan | [Download](#) |
 | NeRF | LLFF (Fern) | Nan | Nan | [Download](#) |
 | ResNet-50 | LLFF (Fern) | Nan | Nan | [Download](#) |
