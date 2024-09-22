@@ -1,7 +1,8 @@
 # NeRF Zoo
 
 Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
-Pretrained weights will be provided soon!
+Pretrained weights are provided through GoogleDrive.
+<strong> Building in progess... </strong>
 
 
 The main objective of this repository is to make nerf easy-to-customize and extensible.<br>
