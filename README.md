@@ -20,7 +20,7 @@ You can easily customize ..... modifying engine and model....
 | Model Name | Dataset | PSNR | SSIM | Weights |
 |-|-|-|-|-|
 | NeRF | LLFF (Fern) | 28.02 | Nan | [Download](https://drive.google.com/file/d/1Z6UcMTHRz9CoycvbDkbHPmdDgaYlKHlc/view?usp=drive_link) |
-| NeRF | LLFF (T-Rex) | 31.01 | Nan | [Download](https://drive.google.com/file/d/1J2EwG785t0Ws1Ko18RDWC80e9W8iG-Uu/view?usp=drive_link) |
+| NeRF | LLFF (T-Rex) | 31.12 | Nan | [Download](https://drive.google.com/file/d/1wnweWR3EJg2g-FD7_DoMmc5r3kPJY05t/view?usp=drive_link) |
 | NeRF | LLFF (Flower) | 27.87 | Nan | [Download](https://drive.google.com/file/d/1J2EwG785t0Ws1Ko18RDWC80e9W8iG-Uu/view?usp=drive_link) |
 | NeRF | LLFF (Fern) | Nan | Nan | [Download](#) |
 | ResNet-50 | LLFF (Fern) | Nan | Nan | [Download](#) |
