@@ -62,23 +62,16 @@ class BasicNeRF(BaseEngine):
         
         near = near.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
         far = far.unsqueeze(1) * torch.ones_like(rays_direction[...,:1]) # B x n_rays x 1
-        
+
         out = self.render_rays(rays_origin, rays_direction, viewdirs, near, far,
                                n_samples=self.n_coarse_samples, n_samples_importance=self.n_fine_samples,
                                white_bkgd=self.white_bkgd, perturb=perturb, raw_noise_std=raw_noise_std)
 
         return out
 
-    def render_rays(self,
-                    rays_origin,
-                    rays_direction,
-                    viewdirs,
-                    near, far,
-                    n_samples,
-                    n_samples_importance,
-                    perturb=0.,
-                    white_bkgd=False,
-                    raw_noise_std=0.):
+    def render_rays(self, rays_origin, rays_direction,
+                    viewdirs, near, far, n_samples, n_samples_importance,
+                    perturb=0., white_bkgd=False, raw_noise_std=0.):
         
         ret = {}
         # check flat
@@ -88,7 +81,7 @@ class BasicNeRF(BaseEngine):
         # 3. get near far
         
         # 4. set t for stratified sampling
-        t_vals = torch.linspace(0., 1., steps=n_samples)
+        t_vals = torch.linspace(0., 1., steps=n_samples).to(self.device)
 
         # 5. sample points (coarse)
         z_vals = near * (1.-t_vals) + far * (t_vals)
@@ -100,20 +93,20 @@ class BasicNeRF(BaseEngine):
             mids = (z_vals[...,1:] + z_vals[...,:-1]) / 2
             uppers = torch.concat([mids, z_vals[...,-1:]], -1)
             lowers = torch.concat([z_vals[...,:1], mids], -1)
-            t_rand = torch.rand(z_vals.shape) * perturb
+            t_rand = torch.rand(z_vals.shape, device=self.device) * perturb
             z_vals = lowers + (uppers - lowers) * t_rand
 
         sampled_points = rays_origin[...,None,:] + rays_direction[...,None,:] * z_vals[...,:,None] # [n_rays, n_samples, 3]
         
         # 6. compute coarse output (as a pdf) + raw2outputs
-        raw_rgb, raw_sigma = self.run_network(self.nerf_coarse, 
-                                              sampled_points, 
-                                              viewdirs)
-        raw_rgb = raw_rgb.cpu()
-        raw_sigma = raw_sigma.cpu()
+        raw_rgb, raw_sigma = self.run_network(self.nerf_coarse,
+                                            sampled_points, 
+                                            viewdirs)
+        # raw_rgb = raw_rgb.cpu()
+        # raw_sigma = raw_sigma.cpu()
         rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw_rgb, raw_sigma, 
                                                                      z_vals, rays_direction, 
-                                                                     raw_noise_std, white_bkgd)
+                                                                     raw_noise_std, white_bkgd, device=self.device)
         ret['coarse_rgb_map'] = rgb_map
         ret['coarse_disp_map'] = disp_map
         ret['coarse_acc_map'] = acc_map
@@ -122,7 +115,7 @@ class BasicNeRF(BaseEngine):
         
         # 7. sample from pdf (importance sampling)
         z_vals_mid = .5 * (z_vals[...,1:] + z_vals[...,:-1])
-        z_samples = sample_pdf(z_vals_mid, weights[...,1:-1], n_samples_importance, det=(perturb==0.))
+        z_samples = sample_pdf(z_vals_mid, weights[...,1:-1], n_samples_importance, det=(perturb==0.), device=self.device)
         z_samples = z_samples.detach() # [batch_size, n_rays, n_samples_importance]
 
         z_vals, _ = torch.sort(torch.cat([z_vals, z_samples], -1), -1)
@@ -130,11 +123,13 @@ class BasicNeRF(BaseEngine):
         
         # 8. compute fine output        
         raw_rgb, raw_sigma = self.run_network(self.nerf_fine,
-                                              sampled_points, 
-                                              viewdirs)
-        raw_rgb = raw_rgb.cpu()
-        raw_sigma = raw_sigma.cpu()
-        rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw_rgb, raw_sigma, z_vals, rays_direction, raw_noise_std, white_bkgd)
+                                            sampled_points, 
+                                            viewdirs)
+        # raw_rgb = raw_rgb.cpu()
+        # raw_sigma = raw_sigma.cpu()
+        rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw_rgb, raw_sigma, z_vals, 
+                                                                     rays_direction, raw_noise_std, 
+                                                                     white_bkgd, device=self.device)
         ret['fine_rgb_map'] = rgb_map
         ret['fine_disp_map'] = disp_map
         ret['fine_acc_map'] = acc_map
@@ -174,17 +169,15 @@ class BasicNeRF(BaseEngine):
         n_iters = 0
         
         for iter, (targets, pose, ray_origins, ray_directions, near, far) in enumerate(dataloader):
-            # targets = targets.to(self.device) # B x 3 x n_rays 
-            targets = targets.permute(0, 2, 1) # B x n_rays x 3
-            
-            # pose = pose.to(self.device)
-            # near = near.to(self.device)
-            # far = far.to(self.device)
-            # ray_origins = ray_origins.to(self.device)
-            # ray_directions = ray_directions.to(self.device) # B x n_rays x 3
+            ray_origins = ray_origins.to(self.device)
+            ray_directions = ray_directions.to(self.device)
+            near = near.to(self.device)
+            far = far.to(self.device)
+            targets = targets.permute(0, 2, 1).to(self.device)
             
             out = self.render(ray_origins, ray_directions, near, far, 
-                              perturb=self.perturb, raw_noise_std=self.raw_noise_std, ndc=self.ndc, hwf=hwf)
+                              perturb=self.perturb, raw_noise_std=self.raw_noise_std, 
+                              ndc=self.ndc, hwf=hwf)
             coarse = out['coarse_rgb_map'] # B x n_rays x 3
             fine = out['fine_rgb_map'] # B x n_rays x 3
             
@@ -253,7 +246,7 @@ class BasicNeRF(BaseEngine):
                 
             # TODO sprial rendering
             
-            if (epoch+1) % self.save_interval == 0:
+            if (epoch+1) % self.save_interval == 0 and (train_loss_dict['fine train loss'] < cfg['loss_threshold'] or epoch > 0.8 * cfg['train']['num_epochs']):
                 ckpt = {
                     'nerf_coarse': self.nerf_coarse.state_dict(),
                     'nerf_fine': self.nerf_fine.state_dict(),
@@ -371,29 +364,30 @@ class BasicNeRF(BaseEngine):
         preds = []
         
         with torch.no_grad():
-            for i in range(len(test_dataset)):
+            for i in tqdm(range(len(test_dataset)), total=len(test_dataset), ncols=100, desc="Evaluating..."):
                 target, pose, ray_origin, ray_direction, near, far = test_dataset.__getitem__(i, eval=True)
+                
                 target = target.view(3, -1) # 3 x n_rays
-                # ray_origin -> n_rays x 3
-                # ray_direction -> n_rays x 3
-                # near -> 1
-                # far -> 1
+                ray_origin = ray_origin.to(self.device)
+                ray_direction = ray_direction.to(self.device)
+                near = near.to(self.device)
+                far = far.to(self.device)
                 
                 pred = []
                 for j in range(0, target.shape[-1], cfg['test']['chunk_size']):
                     ray_origin_chunk = ray_origin[j:j+cfg['test']['chunk_size']].unsqueeze(0)
                     ray_direction_chunk = ray_direction[j:j+cfg['test']['chunk_size']].unsqueeze(0)
 
-                    out = self.render(ray_origin_chunk, ray_direction_chunk, near, far, 
+                    out = self.render(ray_origin_chunk, ray_direction_chunk, near, far,   
                                         perturb=0., raw_noise_std=0., ndc=self.ndc, hwf=hwf)
                 
-                    fine = out['fine_rgb_map'] # 1 x chunk_size x 3
+                    fine = out['fine_rgb_map'].cpu() # 1 x chunk_size x 3
                     pred.append(fine)
                     
                 pred = torch.concat(pred, dim=1) # 1 x n_rays x 3
                 gts.append(target.view(3, H, W))
                 preds.append(pred.view(H, W, 3).permute(2, 0, 1))
-            
+
         perf = {}
         for k, v in metric_dict.items():
             if k not in perf:
