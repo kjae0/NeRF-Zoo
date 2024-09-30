@@ -1,20 +1,14 @@
 # NeRF Zoo
 
-Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 <strong> Under construction... </strong> <br>
-
-
+Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 Pretrained weights are provided through GoogleDrive.
 
+This repository aims to simplify NeRF, making it easily customizable and highly extensible.<br>
 
-The main objective of this repository is to make nerf easy-to-customize and extensible.<br>
-
-## Todo
+## TODO
 - refactoring
-- dataset for blender... etc
-
-## Structure
-You can easily customize ..... modifying engine and model....
+- other nerf family
 
 ## Pretrained Weights
 | Model Name | Dataset | PSNR | SSIM | Weights |
@@ -22,9 +16,8 @@ You can easily customize ..... modifying engine and model....
 | NeRF | LLFF (Fern) | 28.02 | Nan | [Download](https://drive.google.com/file/d/1Z6UcMTHRz9CoycvbDkbHPmdDgaYlKHlc/view?usp=drive_link) |
 | NeRF | LLFF (T-Rex) | 31.12 | Nan | [Download](https://drive.google.com/file/d/1wnweWR3EJg2g-FD7_DoMmc5r3kPJY05t/view?usp=drive_link) |
 | NeRF | LLFF (Flower) | 27.87 | Nan | [Download](https://drive.google.com/file/d/1J2EwG785t0Ws1Ko18RDWC80e9W8iG-Uu/view?usp=drive_link) |
-| NeRF | LLFF (Fern) | Nan | Nan | [Download](#) |
-| ResNet-50 | LLFF (Fern) | Nan | Nan | [Download](#) |
-| ResNet-50 | LLFF (Fern) | Nan | Nan | [Download](#) |
+
+Coming soon!
 
 ## Examples
 ### <center> NeRF </center>
