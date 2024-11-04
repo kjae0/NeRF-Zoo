@@ -18,6 +18,7 @@
 *.flac
 *.log
 *.json
+*.gif
 
 /data/*
 /ckpts/*
