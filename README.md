@@ -4,6 +4,7 @@
 Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 Pretrained weights are provided through GoogleDrive.
 
+[Updated] CPU bottleneck existing in original implementation is removed. No more bottleneck for multiple run in same time.<br>
 This repository aims to simplify NeRF, making it easily customizable and highly extensible.<br>
 
 ## TODO

@@ -6,8 +6,9 @@ class SinusoidalEmbedding(torch.nn.Module):
     def __init__(self, n_dim):
         super(SinusoidalEmbedding, self).__init__()
         self.n_dim = n_dim
-        self.exp = torch.FloatTensor([2 ** (i // 2) * math.pi for i in range(2 * n_dim)]).unsqueeze(0) # 1 x 2L
-        self.exp = nn.Parameter(self.exp, requires_grad=False)
+        exp = torch.FloatTensor([2 ** (i // 2) for i in range(2 * n_dim)]).unsqueeze(0) # 1 x 2L
+        self.register_buffer('exp', exp)
+        # self.exp = nn.Parameter(self.exp, requires_grad=False)
 
     def forward(self, p):
         """

@@ -36,7 +36,6 @@ if __name__ == "__main__":
     # TODO test dataset for validation
     train_dataset, test_dataset = build_dataset(cfg['dataset'], test_spiral=cfg['test']['test_spiral'])
     
-    # TODO DDP / DataParallel
     engine = build_engine(cfg)
     engine.train(cfg, train_dataset, test_dataset)
     

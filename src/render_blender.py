@@ -29,8 +29,8 @@ if __name__ == '__main__':
         cfg = yaml.load(f, Loader=yaml.FullLoader)
         cfg['device'] = args.device
         
-    cfg['dataset']['base_dir'] = '/home/diya/Public/Image2Smiles/jy/NeRF-Zoo/data/nerf_llff_data/fern'
-    dset = LLFFDataset(cfg['dataset'])
+    cfg['dataset']['base_dir'] = os.path.join(cfg['dataset']['base_dir'], cfg['dataset']['object'])
+    dset = BlenderDataset(cfg['dataset'], 'test')
     H, W = dset.get_H(), dset.get_W()
 
     if args.ckpt_name:
