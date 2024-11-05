@@ -4,8 +4,22 @@
 Pytorch implementation of NeRF(Neural Radiance Field) models.<br>
 Pretrained weights are provided through GoogleDrive.
 
-[Updated] CPU bottleneck existing in original implementation is removed. No more bottleneck for multiple run in same time.<br>
+CPU bottleneck existing in original implementation is removed! No more bottleneck for multiple run in same time.<br>
 This repository aims to simplify NeRF, making it easily customizable and highly extensible.<br>
+
+## Structure
+~~~
+    BasicNeRF Class Structure
+    ├── __init__: Initializes models, datasets, and training configurations.
+    ├── run_network: Runs the model network and reshapes the output.
+    ├── train_one_epoch: Conducts a single epoch of training with data loader.
+    ├── train: Manages the overall training loop and evaluates periodically.
+    ├── render: Computes the rendering of rays using coarse and fine sampling.
+    ├── render_rays: Processes ray sampling, applies coarse and fine NeRF models.
+    ├── render_spiral: Renders an image sequence along a spiral trajectory for visualization.
+    ├── load_state_dict: Loads a checkpoint state dictionary into the models and optimizer.
+    └── evaluate: Evaluates model performance on test data, computing metrics like PSNR and MSE.
+~~~
 
 ## TODO
 - refactoring
