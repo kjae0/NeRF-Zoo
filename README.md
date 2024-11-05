@@ -9,7 +9,7 @@ This repository aims to simplify NeRF, making it easily customizable and highly 
 
 ## Structure
 ~~~
-    BasicNeRF Class Structure
+BasicNeRF Class Structure
     ├── __init__: Initializes models, datasets, and training configurations.
     ├── run_network: Runs the model network and reshapes the output.
     ├── train_one_epoch: Conducts a single epoch of training with data loader.
