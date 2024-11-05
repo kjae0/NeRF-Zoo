@@ -9,6 +9,29 @@ This repository aims to simplify NeRF, making it easily customizable and highly 
 
 ## Structure
 ~~~
+NeRF-Zoo
+    ├── ckpts // checkpoints
+    ├── configs
+    │   ├── blender
+    │   └── llff
+    ├── data // datasets
+    ├── nerf
+    │   ├── engines
+    │   ├── models
+    │   └── nn
+    ├── nerf_datasets
+    │   ├── blender_dataset.py
+    │   ├── llff_dataset.py
+    │   └── ray.py
+    └── src
+        ├── metrics.py
+        ├── render_sprial.py
+        ├── test.ipynb
+        ├── train.py
+        └── utils.py
+~~~
+
+~~~
 BasicNeRF Class Structure
     ├── __init__: Initializes models, datasets, and training configurations.
     ├── run_network: Runs the model network and reshapes the output.
