@@ -113,8 +113,8 @@ class BasicNeRF(BaseEngine):
                 si = time.time()
                 
             if self.writer is not None:
-                self.writer.add_scalar("coarse NeRF train Loss", train_loss_coarse, iter)
-                self.writer.add_scalar("fine NeRF train Loss", train_loss_fine, iter)
+                self.writer.add_scalar("coarse NeRF train Loss", coarse_loss.item(), iter)
+                self.writer.add_scalar("fine NeRF train Loss", fine_loss.item(), iter)
                 
         return {'coarse train loss': train_loss_coarse / n_iters,
                 'fine train loss': train_loss_fine / n_iters}, time.time() - s
