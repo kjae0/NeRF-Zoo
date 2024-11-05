@@ -44,6 +44,17 @@ BasicNeRF Class Structure
     └── evaluate: Evaluates model performance on test data, computing metrics like PSNR and MSE.
 ~~~
 
+## Get Started
+To train NeRF, 
+~~~
+    python ./src/train.py --cfg_dir {$CONFIG_DIR}
+~~~
+
+To render with sprial view,
+~~~
+    python ./src/train.py --ckpt_dir {$CKPT_DIR}  --out_dir {$OUT_DIR} --dset_type {$DSET_TYPE}
+~~~
+
 ## TODO
 - refactoring
 - other nerf family
