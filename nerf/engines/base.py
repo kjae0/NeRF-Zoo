@@ -3,6 +3,9 @@ import torch.nn as nn
 
 
 class BaseEngine:
+    """
+        ABC for training and evaluation engines.
+    """
     def __init__():
         pass
     

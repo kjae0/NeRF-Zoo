@@ -1,9 +1,14 @@
 from nerf.engines.base import BaseEngine
 from nerf.models import build_model
-from nerf.ray import get_rays, ndc_rays
-from nerf.utils import build_loss_fn, build_optimizer, build_scheduler, raw2outputs, sample_pdf, get_learning_rate
 from src.utils import save_checkpoints, save_images
 from src.metrics import calculate_psnr, calculate_mse
+from nerf.utils import (build_loss_fn, 
+                        build_optimizer, 
+                        build_scheduler, 
+                        raw2outputs, 
+                        sample_pdf, 
+                        get_learning_rate,
+                        ndc_rays)
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -14,6 +19,8 @@ import time
 import random
 import numpy as np
 
+from nerf_datasets import build_dataset
+
 class BasicNeRF(BaseEngine):
     def __init__(self, cfg, writer=None):
         self.nerf_coarse = build_model(cfg['model'], cfg['model']['coarse_model_params'])
@@ -21,13 +28,19 @@ class BasicNeRF(BaseEngine):
         self.loss_fn = build_loss_fn(cfg['loss'])
         self.optimizer = build_optimizer(cfg['optimizer'], list(self.nerf_coarse.parameters()) + list(self.nerf_fine.parameters())) 
         self.scheduler = build_scheduler(cfg['scheduler'], self.optimizer)
-        print(f"Expected last learning rate: {cfg['optimizer']['optimizer_params']['lr'] * (cfg['scheduler']['scheduler_params']['gamma'] ** int(cfg['train']['num_epochs'] / cfg['scheduler']['scheduler_params']['step_size']))}")
+        self.train_dataset, self.test_dataset = build_dataset(cfg['dataset'], test_spiral=cfg['test']['test_spiral'])
+        
+        total_params = sum(p.numel() for p in self.nerf_fine.parameters())
+        trainable_params = sum(p.numel() for p in self.nerf_fine.parameters() if p.requires_grad)
+
+        print(f"[INFO] Total parameters: {total_params}")
+        print(f"[INFO] Trainable parameters: {trainable_params}")
+        print(f"[INFO] Expected last learning rate: {cfg['optimizer']['optimizer_params']['lr'] * (cfg['scheduler']['scheduler_params']['gamma'] ** int(cfg['train']['num_epochs'] / cfg['scheduler']['scheduler_params']['step_size']))}")
         
         self.device = cfg['device']
         self.verbose = cfg['verbose']
         self.log_interval = cfg['log_interval']
-        self.save_interval = cfg['save_interval']
-        
+        self.save_interval = cfg['save_interval']        
         self.n_coarse_samples = cfg['train']['n_coarse_samples']
         self.n_fine_samples = cfg['train']['n_fine_samples']
         self.white_bkgd = cfg['train']['white_bkgd']
@@ -42,9 +55,138 @@ class BasicNeRF(BaseEngine):
         self.nerf_fine.to(self.device)
         self.loss_fn.to(self.device)
         
-    def render(self, rays_origin, rays_direction, near, far, ndc=False, perturb=0., raw_noise_std=0., hwf=None):
-        # TODO validate ray and camera parameters
+    def run_network(self, model, pts, viewdirs):
+        # pts -> n_rays x n_samples x 3, viewdirs -> B*n_samples x 3
+        B, n_rays, n_samples, _ = pts.shape
+        viewdirs = torch.concat([viewdirs.unsqueeze(2) for _ in range(n_samples)], dim=2)
+        
+        # pts -> # [B x n_rays x n_samples x 3], viewdirs -> [B x n_rays x n_samples x 3]
+        pts = torch.reshape(pts, [-1, 3]) # [B*n_rays*n_samples x 3]
+        viewdirs = torch.reshape(viewdirs, [-1, 3]) # [B*n_rays*n_samples x 3]
 
+        pts = pts.to(self.device)
+        viewdirs = viewdirs.to(self.device)
+        out_rgb, out_sigma = model(pts, viewdirs)
+        
+        out_rgb = torch.reshape(out_rgb, [B, n_rays, n_samples, 3])
+        out_sigma = torch.reshape(out_sigma, [B, n_rays, n_samples, 1])
+        
+        return out_rgb, out_sigma
+
+    def train_one_epoch(self, dataloader, hwf=None):
+        self.nerf_coarse.train()
+        self.nerf_fine.train()
+            
+        s = time.time()
+        si = time.time()
+        train_loss_coarse = 0
+        train_loss_fine = 0
+        n_iters = 0
+        
+        for iter, (targets, pose, ray_origins, ray_directions, near, far) in enumerate(dataloader):
+            ray_origins = ray_origins.to(self.device)
+            ray_directions = ray_directions.to(self.device)
+            near = near.to(self.device)
+            far = far.to(self.device)
+            targets = targets.permute(0, 2, 1).to(self.device)
+            
+            out = self.render(ray_origins, ray_directions, near, far, 
+                              perturb=self.perturb, raw_noise_std=self.raw_noise_std, 
+                              ndc=self.ndc, hwf=hwf)
+            coarse = out['coarse_rgb_map'] # B x n_rays x 3
+            fine = out['fine_rgb_map'] # B x n_rays x 3
+            
+            coarse_loss = self.loss_fn(coarse, targets)
+            fine_loss = self.loss_fn(fine, targets)
+            loss = coarse_loss + fine_loss
+            
+            train_loss_coarse += coarse_loss.item()
+            train_loss_fine += fine_loss.item()
+            n_iters += 1
+            
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            
+            if self.verbose and (iter % self.log_interval == 0):
+                print(f"{iter+1} / {len(dataloader)} Loss: ", loss.item(), "Time Elapsed: ", time.time() - si)
+                si = time.time()
+                
+            if self.writer is not None:
+                self.writer.add_scalar("coarse NeRF train Loss", train_loss_coarse, iter)
+                self.writer.add_scalar("fine NeRF train Loss", train_loss_fine, iter)
+                
+        return {'coarse train loss': train_loss_coarse / n_iters,
+                'fine train loss': train_loss_fine / n_iters}, time.time() - s
+            
+        
+    def train(self, cfg):
+        train_dataset = self.train_dataset
+        test_dataset = self.test_dataset
+        
+        train_dataloader = DataLoader(train_dataset, 
+                                        batch_size=cfg['train']['batch_size'], 
+                                        shuffle=True,
+                                        drop_last=True,
+                                        num_workers=cfg['num_workers'])
+    
+        H = train_dataset.get_H()
+        W = train_dataset.get_W()
+        K = train_dataset.get_K()
+        focal = train_dataset.get_focal()
+        
+        for epoch in range(cfg['train']['num_epochs']):
+            train_loss_dict, elapsed_time = self.train_one_epoch(train_dataloader, hwf=(H, W, focal))
+        
+            print(f"[INFO] {epoch+1} / {cfg['train']['num_epochs']} Train Loss", end=" ")
+            for k, v in train_loss_dict.items():
+                print(f"{k} - {v:6f}", end=" ")
+            print(f"Time: {elapsed_time:2f} Lr: {get_learning_rate(self.optimizer)}")
+            
+            if self.scheduler is not None:
+                self.scheduler.step()
+            
+            # evaluate
+            if (epoch+1) % cfg['test']['eval_interval'] == 0: 
+                metric_dict = {'MSE': calculate_mse, 'PSNR': calculate_psnr}
+                perf, preds, gts, elapsed_time = self.evaluate(cfg, test_dataset, metric_dict, hwf=(H, W, focal))
+
+                print(f"\n{epoch+1} / {cfg['train']['num_epochs']} Eval Results")
+                for k, v in perf.items():
+                    print(f"{k}: {v}")
+                print(f"Time: {elapsed_time:2f}\n")
+                
+                if cfg['test']['save_rendered']:
+                    save_images(os.path.join(cfg['ckpt_dir'], "images"), preds, gts)
+            
+                if self.writer is not None:   
+                    # val result
+                    for k, v in perf.items():
+                        self.writer.add_scalar(k, v, epoch)
+                     
+                    self.writer.add_image('GT', gts[0], epoch)
+                    self.writer.add_image('Pred', preds[0], epoch)
+            
+            if (epoch+1) % self.save_interval == 0:
+                ckpt = {
+                    'nerf_coarse': self.nerf_coarse.state_dict(),
+                    'nerf_fine': self.nerf_fine.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'scheduler': self.scheduler.state_dict(),
+                    'random_states': {
+                        'torch': torch.get_rng_state(),
+                        'numpy': np.random.get_state(),
+                        'python': random.getstate()
+                    }
+                }
+                save_checkpoints(ckpt_path=os.path.join(cfg['ckpt_dir'], f"ckpt_{epoch+1}.pt"),
+                                 ckpt=ckpt,
+                                 epoch=epoch+1,
+                                 train_loss=train_loss_dict,
+                                 val_loss=None)
+    
+        
+    def render(self, rays_origin, rays_direction, near, far, ndc=False, perturb=0., raw_noise_std=0., hwf=None):
         # rays_origin = rays_origin.view(-1, 3)  # B*n_rays x 3
         # rays_direction = rays_direction.view(-1, 3)  # B*n_rays x 3
         viewdirs = rays_direction
@@ -138,131 +280,6 @@ class BasicNeRF(BaseEngine):
         
         return ret
 
-    def run_network(self, model, pts, viewdirs):
-        # pts -> n_rays x n_samples x 3, viewdirs -> B*n_samples x 3
-        B, n_rays, n_samples, _ = pts.shape
-        viewdirs = torch.concat([viewdirs.unsqueeze(2) for _ in range(n_samples)], dim=2)
-        
-        # pts -> # [B x n_rays x n_samples x 3], viewdirs -> [B x n_rays x n_samples x 3]
-        pts = torch.reshape(pts, [-1, 3]) # [B*n_rays*n_samples x 3]
-        viewdirs = torch.reshape(viewdirs, [-1, 3]) # [B*n_rays*n_samples x 3]
-
-        pts = pts.to(self.device)
-        viewdirs = viewdirs.to(self.device)
-        out_rgb, out_sigma = model(pts, viewdirs)
-        
-        out_rgb = torch.reshape(out_rgb, [B, n_rays, n_samples, 3])
-        out_sigma = torch.reshape(out_sigma, [B, n_rays, n_samples, 1])
-        
-        return out_rgb, out_sigma
-
-    def train_one_epoch(self, dataloader, hwf=None):
-        self.nerf_coarse.train()
-        self.nerf_fine.train()
-        # if self.verbose:
-        #     dataloader = tqdm(dataloader, ncols=100, total=len(dataloader), desc="training...")
-            
-        s = time.time()
-        si = time.time()
-        train_loss_coarse = 0
-        train_loss_fine = 0
-        n_iters = 0
-        
-        for iter, (targets, pose, ray_origins, ray_directions, near, far) in enumerate(dataloader):
-            ray_origins = ray_origins.to(self.device)
-            ray_directions = ray_directions.to(self.device)
-            near = near.to(self.device)
-            far = far.to(self.device)
-            targets = targets.permute(0, 2, 1).to(self.device)
-            
-            out = self.render(ray_origins, ray_directions, near, far, 
-                              perturb=self.perturb, raw_noise_std=self.raw_noise_std, 
-                              ndc=self.ndc, hwf=hwf)
-            coarse = out['coarse_rgb_map'] # B x n_rays x 3
-            fine = out['fine_rgb_map'] # B x n_rays x 3
-            
-            # coarse = coarse.to(self.device)
-            # fine = fine.to(self.device)
-            
-            coarse_loss = self.loss_fn(coarse, targets)
-            fine_loss = self.loss_fn(fine, targets)
-            loss = coarse_loss + fine_loss
-            
-            train_loss_coarse += coarse_loss.item()
-            train_loss_fine += fine_loss.item()
-            n_iters += 1
-            
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            
-            if self.verbose and (iter % self.log_interval == 0):
-                print(f"{iter+1} / {len(dataloader)} Loss: ", loss.item(), "Time Elapsed: ", time.time() - si)
-                si = time.time()
-                
-        return {'coarse train loss': train_loss_coarse / n_iters,
-                'fine train loss': train_loss_fine / n_iters}, time.time() - s
-            
-        
-    def train(self, cfg, train_dataset, test_dataset):
-        train_dataloader = DataLoader(train_dataset, 
-                                  batch_size=cfg['train']['batch_size'], 
-                                  shuffle=True,
-                                  drop_last=True,
-                                  num_workers=cfg['num_workers'])
-    
-        H = train_dataset.get_H()
-        W = train_dataset.get_W()
-        K = train_dataset.get_K()
-        focal = train_dataset.get_focal()
-        
-        for epoch in range(cfg['train']['num_epochs']):
-            train_loss_dict, elapsed_time = self.train_one_epoch(train_dataloader, hwf=(H, W, focal))
-        
-            print(f"{epoch+1} / {cfg['train']['num_epochs']} Train Loss", end=" ")
-            for k, v in train_loss_dict.items():
-                print(f"{k} - {v:6f}", end=" ")
-            print(f"Time: {elapsed_time:2f} Lr: {get_learning_rate(self.optimizer)}")
-            
-            if self.scheduler is not None:
-                self.scheduler.step()
-            
-            # evaluate
-            if (epoch+1) % cfg['test']['eval_interval'] == 0: 
-                metric_dict = {'MSE': calculate_mse, 'PSNR': calculate_psnr}
-                perf, preds, gts, elapsed_time = self.evaluate(cfg, test_dataset, metric_dict, hwf=(H, W, focal))
-
-                print(f"\n{epoch+1} / {cfg['train']['num_epochs']} Eval Results")
-                for k, v in perf.items():
-                    print(f"{k}: {v}")
-                print(f"Time: {elapsed_time:2f}\n")
-                
-                if cfg['test']['save_rendered']:
-                    save_images(os.path.join(cfg['ckpt_dir'], "images"), preds, gts)
-            
-            # TODO tensorboard logging...
-            # if self.writer is not None:
-                # self.writer.add_scalar("Train Loss", train_loss, epoch)
-                
-            # TODO sprial rendering
-            
-            if (epoch+1) % self.save_interval == 0 and (train_loss_dict['fine train loss'] < cfg['loss_threshold'] or epoch > 0.8 * cfg['train']['num_epochs']):
-                ckpt = {
-                    'nerf_coarse': self.nerf_coarse.state_dict(),
-                    'nerf_fine': self.nerf_fine.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                    'scheduler': self.scheduler.state_dict(),
-                    'random_states': {
-                        'torch': torch.get_rng_state(),
-                        'numpy': np.random.get_state(),
-                        'python': random.getstate()
-                    }
-                }
-                save_checkpoints(ckpt_path=os.path.join(cfg['ckpt_dir'], f"ckpt_{epoch+1}.pt"),
-                                 ckpt=ckpt,
-                                 epoch=epoch+1,
-                                 train_loss=train_loss_dict,
-                                 val_loss=None)
     
     def render_spiral(self, dataset, batch_size=10, verbose=True, n_views=120, n_rots=2, render_train=False, test=None, near=None, far=None):
         if render_train:
@@ -342,8 +359,7 @@ class BasicNeRF(BaseEngine):
         self.nerf_fine.load_state_dict(ckpt['nerf_fine'])
         self.optimizer.load_state_dict(ckpt['optimizer'])
         self.scheduler.load_state_dict(ckpt['scheduler'])
-        
-        print(f"Loaded state dict from epoch {state_dict['epoch']}")
+        print(f"[INFO] Loaded state dict from epoch {state_dict['epoch']} successfully.")
         
     def evaluate(self, cfg, test_dataset, metric_dict, hwf=None):
         if hwf == None:

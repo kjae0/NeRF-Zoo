@@ -1,12 +1,6 @@
 import torch
 import numpy as np
 
-def _move_rotation_matrix_axis(poses):
-    poses = torch.concat([poses[:, 1:2, :], -poses[:, 0:1, :], poses[:, 2:, :]], dim=1)
-    poses = poses.permute(2, 0, 1)
-    
-    return poses
-
 def normalize(x):
     return x / np.linalg.norm(x)
 

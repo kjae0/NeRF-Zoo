@@ -20,8 +20,8 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_dir', type=str, required=True)
     parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--ckpt_name', type=str, default="")
-    parser.add_argument("--device", type=str, default="cuda:0")
-    # parser.add_argument("--verbose_off", type='store_false', default=True)
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--dset_type", type=str, default="llff")
     
     args = parser.parse_args()
     
@@ -30,22 +30,27 @@ if __name__ == '__main__':
         cfg['device'] = args.device
         
     cfg['dataset']['base_dir'] = '/home/diya/Public/Image2Smiles/jy/NeRF-Zoo/data/nerf_llff_data/fern'
-    dset = LLFFDataset(cfg['dataset'])
+    
+    if args.dset_type == 'llff':
+        dset = LLFFDataset(cfg['dataset'])
+    elif args.dset_type == 'blender':
+        dset = BlenderDataset(cfg['dataset'], 'test')
+        
     H, W = dset.get_H(), dset.get_W()
 
     if args.ckpt_name:
-        print(f"Loading {args.ckpt_name} from {args.ckpt_dir}")
+        print(f"[INFO] Loading {args.ckpt_name} from {args.ckpt_dir}")
         state_dict = torch.load(os.path.join(args.ckpt_dir, args.ckpt_name), map_location=args.device)        
     else:
         ckpt_names = [f for f in os.listdir(args.ckpt_dir) if f.endswith('.pt')]
         ckpt_names.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
         
-        print(f"Loading {ckpt_names[-1]} from {args.ckpt_dir}")
+        print(f"[INFO] Loading {ckpt_names[-1]} from {args.ckpt_dir}")
         state_dict = torch.load(os.path.join(args.ckpt_dir, ckpt_names[-1]), map_location=args.device)
 
     model = build_engine(cfg)
     model.load_state_dict(state_dict)
-    print("Model loaded")
+    print("[INFO] Model loaded")
 
     # TODO verbose set
     out = model.render_spiral(dset, batch_size=8192, render_train=False, verbose=True)

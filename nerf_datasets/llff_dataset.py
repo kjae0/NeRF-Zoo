@@ -6,8 +6,9 @@ from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-from nerf_datasets.utils import _move_rotation_matrix_axis, poses_avg, normalize, render_path_spiral, recenter_poses
-from nerf.ray import get_rays, get_all_rays
+
+from nerf_datasets.utils import poses_avg, normalize, render_path_spiral, recenter_poses
+from nerf_datasets.ray import get_rays, get_all_rays
 
 
 class LLFFDataset(Dataset):

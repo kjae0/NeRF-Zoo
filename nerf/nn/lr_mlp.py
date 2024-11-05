@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from nerf.nn import lr_mlp
+from nerf.nn import lr_linear
 
 class MLP(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act_fn=nn.ReLU(), skip_concat_connection=[], skip_connection=[]):
@@ -11,7 +11,7 @@ class MLP(nn.Module):
         self.skip_concat_connection = skip_concat_connection
         self.skip_connection = skip_connection
         
-        self.layer = nn.ModuleList([lr_mlp.DecomposedLinear(input_dim, hidden_dim)])
+        self.layer = nn.ModuleList([lr_linear.DecomposedLinear(input_dim, hidden_dim)])
         self.act_fn = act_fn
         
         for i in range(num_layers - 1):
@@ -25,7 +25,7 @@ class MLP(nn.Module):
             else:
                 current_output_dim = hidden_dim
                 
-            self.layer.append(lr_mlp.DecomposedLinear(current_hidden_dim, current_output_dim))
+            self.layer.append(lr_linear.DecomposedLinear(current_hidden_dim, current_output_dim))
     
     def forward(self, x):
         out = x.clone()

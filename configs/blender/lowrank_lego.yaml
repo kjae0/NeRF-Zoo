@@ -1,32 +1,32 @@
 # global configuration
-num_workers: 8                # Number of workers for DataLoader
+num_workers: 4                # Number of workers for DataLoader
 seed: 42                      # Random seed for reproducibility
 device: cuda                  # Device to use (cpu, cuda, cuda:0, etc.)
 verbose: false                # Whether to display progress bars
-save_interval: 500            # Interval of epochs to save checkpoints
+save_interval: 100            # Interval of epochs to save checkpoints
 log_interval: 50              # Interval to log training statistics
 ckpt_dir: ./ckpts
 
 # Dataset configuration
 dataset:
-  name: llff                    # Dataset class name
-  base_dir: ./data/nerf_llff_data # Path to the dataset
-  object: trex                  # Object to render
-  image_folder: images          # Folder with images
-  factor: 8                      # Resizing factor for images
+  name: blender                    # Dataset class name
+  base_dir: ./data/nerf_synthetic # Path to the dataset
+  object: lego                  # Object to render
+  factor: 2                      # Resizing factor for images
   image_preload: true           # Whether to preload all images into memory
-  n_sample_rays: 2048           # Number of rays to sample from each image (None means use all rays)
+  n_sample_rays: 1024           # Number of rays to sample from each image (None means use all rays)
   boundary_factor: 0.75         # Scaling factor for the boundary (optional)
   test_spiral: false            # Use spiral path for testing
+  white_bkgd: false 
   ndc: false
   train_test_split:
-    test_size: 0.2
+    test_size: 0.1
     uniform_interval: true
 
 
 # Model configuration
 model:
-  name: 'basic_nerf'            # Model class name
+  name: 'lowrank_nerf'            # Model class name
   coarse_model_params:
     xyz_dim: 3                    # Number of input dimensions for the network
     xyz_embedding_dim: 10         # Dimension of the spatial embedding
@@ -50,7 +50,7 @@ model:
 optimizer:
   name: adam                    # Type of optimizer (adam, sgd, etc.)
   optimizer_params:
-    lr: 0.001                  # Learning rate
+    lr: 0.0005                   # Learning rate
     betas: [0.9, 0.999]         # Adam's beta parameters
 
 # Scheduler configuration
@@ -58,7 +58,7 @@ scheduler:
   name: step                    # Scheduler type (step, cosine, etc.)
   scheduler_params:
     step_size: 600               # Number of steps to reduce learning rate
-    gamma: 0.90                   # Multiplicative factor of learning rate decay
+    gamma: 0.8                   # Multiplicative factor of learning rate decay
 
 # Loss function configuration
 loss:
@@ -67,7 +67,7 @@ loss:
 # Training configuration
 train:
   batch_size: 1                 # Batch size
-  num_epochs: 30000             # Number of epochs to train
+  num_epochs: 2000             # Number of epochs to train
   verbose: true                 # Whether to display progress bars
   output_dir: ./outputs         # Directory to save outputs/checkpoints
   n_coarse_samples: 64          # Number of stratified samples for the coarse network
@@ -78,8 +78,8 @@ train:
 
 # Testing configuration
 test:
-  chunk_size: 1024
-  eval_interval: 100
+  chunk_size: 2048
+  eval_interval: 30
   test_only: false              # Only run testing without training
   test_spiral: false            # If set to true, test with spiral path instead of regular
   save_rendered: true           # Save rendered images

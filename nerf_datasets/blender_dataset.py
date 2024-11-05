@@ -10,7 +10,9 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 
-from nerf.ray import get_rays, get_all_rays  # Ensure you have these utility functions
+from nerf_datasets.ray import get_rays, get_all_rays  # Ensure you have these utility functions
+
+# Follows official NeRF implementation
 
 trans_t = lambda t : torch.Tensor([
     [1,0,0,0],
@@ -32,11 +34,11 @@ rot_theta = lambda th : torch.Tensor([
 
 
 
-def load_blender_data(basedir="/home/diya/Public/Image2Smiles/jy/nerf-pytorch/data/nerf_synthetic/lego", half_res=False, testskip=30):
+def load_blender_data(base_dir="./data/nerf_synthetic/lego", half_res=False, testskip=30):
     splits = ['train', 'val', 'test']
     metas = {}
     for s in splits:
-        with open(os.path.join(basedir, 'transforms_{}.json'.format(s)), 'r') as fp:
+        with open(os.path.join(base_dir, 'transforms_{}.json'.format(s)), 'r') as fp:
             metas[s] = json.load(fp)
 
     all_imgs = []
@@ -52,7 +54,7 @@ def load_blender_data(basedir="/home/diya/Public/Image2Smiles/jy/nerf-pytorch/da
             skip = testskip
             
         for frame in meta['frames'][::skip]:
-            fname = os.path.join(basedir, frame['file_path'] + '.png')
+            fname = os.path.join(base_dir, frame['file_path'] + '.png')
             imgs.append(imageio.imread(fname))
             poses.append(np.array(frame['transform_matrix']))
         imgs = (np.array(imgs) / 255.).astype(np.float32) # keep all 4 channels (RGBA)
